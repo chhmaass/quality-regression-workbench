@@ -12,9 +12,17 @@
 
 Beispielwerte des synthetischen Standardfalls (Seed 42, Zufallssplit, einfache Imputation): Referenzregression R² ungefähr 0,783, RMSE ungefähr 0,613; Referenzklassifikation Accuracy ungefähr 0,892, Precision ungefähr 0,830, Recall ungefähr 0,886. Dies sind ausschließlich synthetische Demonstrationswerte, keine betrieblichen Erfolgskennzahlen und keine Modellwahlgrundlage auf realen Daten.
 
-## Vorbereitet, noch nicht ausgeführt
+## Zusätzlich auf GitHub erfolgreich ausgeführt
 
-- PostgreSQL-Migrations-/Persistenzprüfung als GitHub-Actions-Service und `python -m scripts.postgres_smoke`.
+GitHub Actions hat für Implementierungscommit `ba7291df4d7141bf78f0b1ca9fdde541a723bf88` alle Prüfungen bestanden:
+
+- Installation aus `requirements.lock` auf Python 3.12.
+- Automatisierte Tests und beide UI-Abläufe.
+- PostgreSQL 16: Alembic-Migration, Datensatzimport, Regression, persistenter Analyselauf und HTML-Bericht.
+
+Prüflauf: https://github.com/chhmaass/quality-regression-workbench/actions/runs/39035384783
+
+## Vorbereitet, noch nicht ausgeführt
 - Docker-/Compose-Build.
 - Tatsächlicher Railway-Deploy, private Netzwerkverbindung und Wiederanlauf mit PostgreSQL.
 - Visuelle Browserprüfung über verschiedene Bildschirmgrößen. AppTest prüft Widgets und Abläufe, keine Pixelgestaltung.
