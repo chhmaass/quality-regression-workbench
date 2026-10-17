@@ -12,7 +12,9 @@ Eine kleine QM-Regressionswerkstatt: CSV-Daten prüfen, Einflussgrößen untersu
 - Ungültige Grundeinstellungen sperren den Start; geänderte Einstellungen kennzeichnen alte Ergebnisse.
 - Numerisches Target direkt wählen oder Istwert minus Sollwert berechnen.
 - Binäres Target direkt wählen oder aus ein-/zweiseitigen Toleranzgrenzen erzeugen.
-- Numerische und kategoriale Features, ausgewählte Interaktionen, Zeitcounter und Zeitcounter².
+- Numerische und kategoriale Features, Zentrierung vor ausgewählten Interaktionen, Zeitcounter und Zeitcounter².
+- Optionaler PCA-Pfad: numerische Trainingsfeatures standardisieren, auf feste Komponentenanzahl verdichten und Kategorien separat codieren.
+- Ergebnisreiter **Vorhersagen**, **Einflussgrößen**, **Modelldetails** mit Residuen-/Zeitplots, Wahrscheinlichkeiten, Koeffizienten, Odds Ratios und PCA-Grafiken.
 - Lineare/logistische Referenzregression mit optionalem Elastic-Net-Vergleich.
 - Fold-lokale Aufbereitung und Zufalls-, Gruppen- oder Zeitvalidierung.
 - **Test-R²/RMSE** bzw. **Accuracy/Precision/Recall und 2×2-Konfusionsmatrix**.
@@ -57,6 +59,14 @@ Für Zeittrends: `timestamp` auswählen, Zeitcounter/Quadrat aktivieren und **Zu
 
 Für MICE: `examples/synthetic_cross_section.csv` hochladen, `deviation` als Target, `temperature` und `throughput` als numerische Features wählen. Keine Kategorien, Zeitmerkmale oder Einheiten zuordnen. MICE und optional die getrennte retrospektive Inferenz einschalten.
 
+## Zentrierung, PCA und Regressionsergebnisse
+
+In **Erweiterte Einstellungen → Feature Engineering** zwischen direkten Features und PCA wählen. Bei direkten Features ist Zentrierung in der UI für neue Datensätze vorausgewählt; die API behält aus Kompatibilitätsgründen `center_numeric=false` als Standard. Zeitcounter werden wie bisher um das jeweilige Trainingsmittel zentriert. Alle Bezugswerte werden pro Trainingsfold gelernt und im Ergebnis dokumentiert.
+
+Für PCA das Beispiel **Korrelierte Sensoren (PCA)** wählen und laden: sechs korrelierte numerische Sensoren, Maschinentyp, zwei Targets, Zeit und Maschinen-ID. Im PCA-Modus zunächst zwei Hauptkomponenten wählen. Numerische Features werden imputiert, standardisiert und per PCA transformiert. Kategorien und Fehlwertindikatoren bleiben separat. PCA ist mit linearer/logistischer Regression, Elastic Net sowie Zufalls-, Gruppen- und Zeitsplits nutzbar; Kombinationen mit MICE, Interaktionen und Zeitpolynomen sind vorerst gesperrt. PCA ist keine Faktorenanalyse und garantiert keine bessere Vorhersage.
+
+Koeffizienten werden sowohl pro Standardabweichung der erzeugten Designspalte als auch in deren unskalierten Einheiten gezeigt. Letztere beziehen sich ggf. auf zentrierte Größen oder PC-Scores. Logistische Odds Ratios sind keine Risikoverhältnisse; Intercept-Exponent = Basis-Odds. Bei Interaktionen kann ein numerischer Kurvenvergleich auf Trainingsquantilen 10/50/90 % angefordert werden. Kein Koeffizient oder PCA-Gewicht ist eine allgemeine Feature-Importance. Alte gespeicherte Läufe bleiben ohne neu berechnete Metadaten darstellbar.
+
 ## Target und Grenzen
 
 Fachliche Toleranzgrenzen erzeugen den beobachteten Fehlerstatus. Standard: auf der Grenze noch zulässig. Fehlende erforderliche Grenzen erzeugen **unbekannt**, nicht „gut“.
@@ -73,6 +83,7 @@ Eine Messwert-Verletzungsquote ist keine Geräte-Ausschussquote. Istwert, Abweic
 |---|---|
 | `POST /datasets` | Multipart-Upload im Feld `file` |
 | `POST /datasets/demo` | Reproduzierbare synthetische Daten |
+| `POST /datasets/demo-pca` | Synthetisches Beispiel korrelierter Sensoren |
 | `GET /datasets/{id}` | Vorschau und Datenqualität |
 | `POST /datasets/{id}/preview` | Target-/Fallzahlen und Testaufteilung ohne Modellschätzung oder Speicherung |
 | `POST /datasets/{id}/analyses` | Validierte Analysekonfiguration ausführen |

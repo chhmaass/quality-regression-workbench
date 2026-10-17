@@ -15,6 +15,7 @@ from sklearn.model_selection import (GridSearchCV, GroupKFold, GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from . import __version__
 from .data import build_target, numeric, profile_structure, time_values
 from .features import FeatureBuilder
 from .schemas import AnalysisConfig
@@ -45,7 +46,8 @@ def make_pipeline(c: AnalysisConfig, regularized: bool, seed: int):
             solver="saga" if regularized else "lbfgs", max_iter=5000, random_state=seed)
     return Pipeline([("features", FeatureBuilder(numeric=tuple(c.numeric), categorical=tuple(c.categorical),
         time_feature=c.time_feature, time_squared=c.time_squared, interactions=tuple(c.interactions),
-        imputation=c.imputation, seed=seed, iterations=c.mice_iterations)),
+        imputation=c.imputation, seed=seed, iterations=c.mice_iterations,
+        center_numeric=c.center_numeric, pca_components=c.pca_components if c.feature_mode == "pca" else None)),
         ("scale", StandardScaler()), ("model", estimator)])
 
 
@@ -83,6 +85,10 @@ def get_splits(X: pd.DataFrame, y: pd.Series, c: AnalysisConfig):
         for a, b in folds:
             if y.iloc[train].iloc[a].nunique() < 2 or y.iloc[train].iloc[b].nunique() < 2:
                 raise ValueError("Ein Validierungsfold enthält nur eine Klasse; mehr Daten oder anderes Design nötig.")
+    if c.feature_mode == "pca":
+        smallest = min([len(train)] + ([len(a) for a, _ in folds] if c.compare_elastic else []))
+        if c.pca_components > min(len(c.numeric), smallest - 1):
+            raise ValueError("PCA-Komponentenanzahl übersteigt den kleinsten Trainingsfold; Anzahl reduzieren.")
     return train, test, folds
 
 
@@ -121,21 +127,26 @@ def conditional_curve(models, Xtrain, c):
         reference["__raw_time"] = float(Xtrain["__raw_time"].median())
     values = np.linspace(float(Xtrain[varying].min()), float(Xtrain[varying].max()), 30)
     groups = sorted(Xtrain[c.effect_group].fillna("(fehlend)").unique())[:4] if c.effect_group else ["Referenz"]
+    if c.effect_modifier:
+        quantiles = Xtrain[c.effect_modifier].quantile([.1, .5, .9]).drop_duplicates().tolist()
+        groups = [f"{c.effect_modifier} = {v:.4g}" for v in quantiles]
     curve = []
-    for group in groups:
+    for group_index, group in enumerate(groups):
         grid = pd.DataFrame([reference.copy() for _ in values])
         grid[varying] = values
         if c.effect_group:
             grid[c.effect_group] = group
+        if c.effect_modifier:
+            grid[c.effect_modifier] = quantiles[group_index]
         predictions = [m.predict(grid) if c.task == "linear" else m.predict_proba(grid)[:, 1] for m in models]
-        plotted_values = values - models[0].named_steps["features"].time_origin_ if varying == "__raw_time" else values
+        plotted_values = values - (models[0].named_steps["features"].time_origin_ + models[0].named_steps["features"].time_center_) if varying == "__raw_time" else values
         curve.extend({"x": float(x), "prediction": float(pred), "group": str(group)} for x, pred in zip(plotted_values, np.mean(predictions, axis=0)))
-    return {"feature": c.effect_feature, "group_feature": c.effect_group, "reference": reference, "rows": curve,
-            "note": "Bedingte Modellvorhersage: übrige Features auf Trainingsmedian/-modus fixiert. Höchstens vier Gruppen, keine Kausalwirkung."}
+    return {"feature": c.effect_feature, "group_feature": c.effect_group or c.effect_modifier, "reference": reference, "rows": curve,
+            "note": "Bedingte Modellvorhersage: übrige Features auf Trainingsmedian/-modus fixiert. Kategorien: höchstens vier Gruppen; numerischer Vergleich: Trainingsquantile 10/50/90 %. Zeitachse bei __time um Trainingsmittel zentriert. Keine Kausalwirkung."}
 
 
 def reference_inference(pipeline, Xtrain, ytrain, c):
-    if c.task != "linear" or c.imputation == "mice" or Xtrain[c.numeric].isna().any().any():
+    if c.feature_mode == "pca" or c.task != "linear" or c.imputation == "mice" or Xtrain[c.numeric].isna().any().any():
         return None
     import statsmodels.api as sm
     design = pipeline.named_steps["scale"].transform(pipeline.named_steps["features"].transform(Xtrain))
@@ -151,7 +162,50 @@ def reference_inference(pipeline, Xtrain, ytrain, c):
     names = ["Intercept"] + pipeline.named_steps["features"].get_feature_names_out().tolist()
     return {"note": "Inferenz auf Trainingsfällen und standardisierter Designmatrix. " + covariance,
             "coefficients": [{"feature": name, "coefficient": float(result.params[i]), "standard_error": float(result.bse[i]),
-                              "p_value": float(result.pvalues[i])} for i, name in enumerate(names)]}
+                              "p_value": float(result.pvalues[i]), "ci_lower": float(result.conf_int()[i,0]),
+                              "ci_upper": float(result.conf_int()[i,1])} for i, name in enumerate(names)]}
+
+
+def design_coefficients(models, names, c):
+    """Back-transform final design scaling, retaining centered/PC design units."""
+    betas = []
+    intercepts = []
+    for pipeline in models:
+        scale, estimator = pipeline.named_steps["scale"], pipeline.named_steps["model"]
+        beta = np.ravel(estimator.coef_) / scale.scale_
+        betas.append(beta)
+        intercepts.append(float(np.ravel(estimator.intercept_)[0] - np.dot(scale.mean_, beta)))
+    mean = np.mean(betas, axis=0)
+    rows = [{"feature": "Intercept", "coefficient": float(np.mean(intercepts))}]
+    rows += [{"feature": str(name), "coefficient": float(value)} for name, value in zip(names, mean)]
+    if c.task == "logistic":
+        for row in rows:
+            value = row["coefficient"]
+            row["odds_ratio"] = float(np.exp(value)) if abs(value) < 700 else None
+    return {"rows": rows,
+            "note": "Koeffizienten in Einheiten der unskalierten Designspalten: numerische Features ggf. um Trainingsmittel zentriert, Dummies 0→1, PC-Scores nach PCA. Bei Interaktionen hängt ein Haupteffekt vom Wert der anderen Merkmale ab. Odds Ratios sind bedingte Odds-Verhältnisse, keine Wahrscheinlichkeitsverhältnisse. Intercept-Exponent = Basis-Odds." +
+            (" Bei MICE Mittelwerte über Modelle, keine Koeffizienten oder Odds Ratios eines einzelnen Ensemblemodells; keine gepoolten Intervalle." if len(models) > 1 else "")}
+
+
+def preprocessing_details(models, c):
+    chain_details = []
+    for model in models:
+        builder = model.named_steps["features"]
+        detail = builder.metadata()
+        scale = model.named_steps["scale"]
+        detail["design_scaling"] = [{"feature": str(name), "mean": float(mean), "scale": float(sd)}
+            for name,mean,sd in zip(builder.get_feature_names_out(), scale.mean_, scale.scale_)]
+        chain_details.append(detail)
+    return {"first_chain": chain_details[0], "chains": chain_details,
+            "note": "Alle Bezugswerte ausschließlich auf dem jeweiligen Training gelernt, auch innerhalb der Validierungsfolds. Bei mehreren MICE-Modellen gelten je Modell eigene Bezugswerte."}
+
+
+def pca_test_scores(model, Xtest, ytest):
+    builder = model.named_steps["features"]
+    scores = builder.pca_.transform(builder.pca_scaler_.transform(builder._impute(Xtest)))
+    step = max(1, int(np.ceil(len(scores) / 2000)))
+    return [{"PC1": float(scores[i,0]), "PC2": float(scores[i,1]) if scores.shape[1] > 1 else None,
+             "observed": float(ytest.iloc[i])} for i in range(0,len(scores),step)]
 
 
 def prepare_analysis(df: pd.DataFrame, c: AnalysisConfig):
@@ -202,6 +256,8 @@ def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
                 "Wahrscheinlichkeitsschwelle vor der Testbewertung festlegen; nachträgliches Erkunden ist explorativ."]
     if c.entity and c.split == "random":
         messages.append("Wiederholte Einheiten bei Zufallssplit: keine Aussage über Generalisierung auf neue Einheiten oder Zukunft.")
+    if c.feature_mode == "pca":
+        messages.append("PCA erklärt Featurevarianz, nicht Vorhersagegüte. Komponentenanzahl fachlich vorab festlegen; keine klassische Inferenz für den PCA-Pfad.")
     if c.imputation == "mice":
         messages.append("Vorhersagen sind Mittelwerte mehrerer fold-lokal imputierter Modelle; Koeffizientenstreuung ist kein Rubin-Konfidenzintervall.")
     if c.imputation == "simple":
@@ -256,6 +312,9 @@ def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
                 "intercept": float(np.mean([np.ravel(m.named_steps["model"].intercept_)[0] for m in models])),
                 "category_references": {name: levels[0] for name, levels in models[0].named_steps["features"].category_levels_.items()},
                 "conditional_curve": conditional_curve(models, Xtrain, c),
+                "preprocessing": preprocessing_details(models, c),
+                "design_coefficients": design_coefficients(models, names, c),
+                "pca_scores": pca_test_scores(models[0], Xtest, ytest) if c.feature_mode == "pca" else None,
                 "inference": reference_inference(models[0], Xtrain, ytrain, c) if not regularized else None,
                 "rows": [{"source_row": int(source_rows[test[j]] + 2), "observed": float(ytest.iloc[j]), "prediction": float(mean_pred[j]),
                     "residual": float(ytest.iloc[j] - mean_pred[j]) if c.task == "linear" else None,
@@ -278,7 +337,7 @@ def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
         "test_scope": "Ausschließlich zurückgehaltene Testfälle; kein automatisches anschließendes Training auf allen Fällen.",
         "models": results, "pooled_inference": inference,
         "warnings": list(dict.fromkeys(messages)), "duration_seconds": round(time.monotonic() - started, 3),
-        "versions": {"sklearn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__, "scipy": scipy.__version__}}
+        "versions": {"workbench": __version__, "sklearn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__, "scipy": scipy.__version__}}
     buffer = io.BytesIO()
     joblib.dump({"config": c.model_dump(), "models": artifacts, "versions": output["versions"]}, buffer)
     return output, buffer.getvalue()

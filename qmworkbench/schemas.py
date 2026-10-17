@@ -22,6 +22,9 @@ class AnalysisConfig(BaseModel):
     time_source: Literal["datetime", "numeric"] = "datetime"
     time_feature: bool = False
     time_squared: bool = False
+    center_numeric: bool = False
+    feature_mode: Literal["direct", "pca"] = "direct"
+    pca_components: int = Field(default=2, ge=1, le=25)
     interactions: list[tuple[str, str]] = Field(default_factory=list, max_length=12)
     imputation: Literal["complete", "simple", "mice"] = "simple"
     imputations: int = Field(default=5, ge=2, le=10)
@@ -33,6 +36,7 @@ class AnalysisConfig(BaseModel):
     threshold: float = Field(default=0.5, ge=0.01, le=0.99)
     effect_feature: str | None = None
     effect_group: str | None = None
+    effect_modifier: str | None = None
     seed: int = Field(default=42, ge=0, le=2147483647)
 
     @model_validator(mode="after")
@@ -68,6 +72,13 @@ class AnalysisConfig(BaseModel):
             raise ValueError("Einflussdiagramm benötigt numerisches Feature oder __time.")
         if self.effect_group and (not self.effect_feature or self.effect_group not in self.categorical):
             raise ValueError("Diagrammgruppierung benötigt eine ausgewählte Kategorie und ein numerisches Diagrammfeature.")
+        if self.effect_modifier and (not self.effect_feature or self.effect_modifier not in self.numeric or self.effect_modifier == self.effect_feature or self.effect_group):
+            raise ValueError("Numerischer Kurvenvergleich benötigt ein anderes numerisches Feature und keine Kategoriengruppierung.")
+        if self.feature_mode == "pca":
+            if len(self.numeric) < 2 or self.pca_components > len(self.numeric):
+                raise ValueError("PCA benötigt mindestens zwei numerische Features; Komponentenanzahl darf deren Anzahl nicht überschreiten.")
+            if self.imputation == "mice" or self.interactions or self.time_feature or self.time_squared or self.pooled_inference:
+                raise ValueError("PCA unterstützt zunächst einfache Imputation/vollständige Fälle ohne MICE, Interaktionen oder Zeitpolynome. Zeit- und Gruppentests bleiben möglich.")
         pairs = set()
         for a, b in self.interactions:
             pair = tuple(sorted((a, b)))

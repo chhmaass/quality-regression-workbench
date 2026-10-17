@@ -131,3 +131,21 @@ def demo_data(n: int = 600, seed: int = 7) -> pd.DataFrame:
         "deviation": deviation, "lower": -2., "upper": 2., "violation": (abs(deviation) > 2).astype(int)})
     frame.loc[rng.choice(n, max(1, n // 20), replace=False), "temperature"] = np.nan
     return frame
+
+
+def demo_pca_data(n: int = 600, seed: int = 83) -> pd.DataFrame:
+    """Six correlated sensors driven by two independent latent process states."""
+    rng = np.random.default_rng(seed)
+    load, heat = rng.normal(size=(2, n))
+    kind = rng.choice(["Typ A", "Typ B"], n)
+    frame = pd.DataFrame({"machine_id": rng.choice([f"M{i:02d}" for i in range(20)], n),
+                          "timestamp": pd.date_range("2025-01-01", periods=n, freq="h").astype(str), "machine_type": kind})
+    for name, origin, factor in [("sensor_pressure", 50, load), ("sensor_flow", 30, .9*load+.1*heat),
+                                  ("sensor_current", 12, 1.1*load), ("sensor_temperature", 22, heat),
+                                  ("sensor_vibration", 5, .2*load+.8*heat), ("sensor_load", 70, .8*load+.2*heat)]:
+        frame[name] = origin + factor + rng.normal(0, .08, n)
+    deviation = .8*load + .7*heat + .3*(kind == "Typ B") + rng.normal(0,.3,n)
+    frame["deviation"] = deviation
+    frame["violation"] = (abs(deviation) > 1.5).astype(int)
+    frame.loc[::23, "sensor_temperature"] = np.nan
+    return frame

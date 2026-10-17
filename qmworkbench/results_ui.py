@@ -2,8 +2,9 @@
 import json
 import httpx
 import pandas as pd
-import plotly.express as px
 import streamlit as st
+from . import result_plots
+from .report import safe_csv
 from .ui import request, describe_config, draft_changed, MODEL_LABELS, positive_label
 
 
@@ -43,54 +44,63 @@ def render():
         tn, fp = metrics["confusion_matrix"][0]
         fn, tp = metrics["confusion_matrix"][1]
         st.write(f"Von **{tp + fn} tatsächlichen positiven Fällen** wurden **{tp} erkannt** und **{fn} übersehen**. Bei **{fp} Fällen** wurde fälschlich positiv vorhergesagt (Fehlalarme).")
-        st.caption("Accuracy: Anteil korrekter Entscheidungen. Precision: Anteil tatsächlicher positiver Fälle unter den positiven Vorhersagen. Recall: Anteil erkannter Fälle unter allen tatsächlichen positiven Fällen.")
-        st.caption(f"Positive Klasse: {positive_label(r['config'])}. Wahrscheinlichkeitsschwelle: {r['config']['threshold']:.0%}.")
-        st.write("**Konfusionsmatrix · positive Klasse = 1**")
-        st.dataframe(pd.DataFrame(metrics["confusion_matrix"], index=["Beobachtet 0", "Beobachtet 1"], columns=["Vorhergesagt 0", "Vorhergesagt 1"]), use_container_width=True)
-        fig = px.histogram(rows, x="prediction", color=rows["observed"].astype(int).astype(str), barmode="overlay", nbins=20,
-                           labels={"prediction": "Geschätzte Verletzungswahrscheinlichkeit", "color": "Beobachtet"})
-        fig.add_vline(x=r["config"]["threshold"], line_dash="dash")
-    else:
-        show_time = rows["time"].notna().any() and st.checkbox("Zeitverlauf statt Vorhersagevergleich")
-        if show_time:
-            ordered = rows.copy()
-            ordered["plot_time"] = pd.to_numeric(ordered["time"]) if r["config"]["time_source"] == "numeric" else pd.to_datetime(ordered["time"], utc=True)
-            ordered = ordered.sort_values("plot_time")
-            fig = px.scatter(ordered, x="plot_time", y=["observed", "prediction"], labels={"value": "Target", "plot_time": "Zeit / Counter"})
+        st.caption(f"Positive Klasse: {positive_label(r['config'])}. Wahrscheinlichkeitsschwelle: {r['config']['threshold']:.0%}. Accuracy: Anteil korrekt; Precision: Anteil tatsächlich positiv unter positiven Vorhersagen; Recall: Anteil erkannter positiver Fälle.")
+    prediction_tab, effect_tab, detail_tab = st.tabs(["Vorhersagen", "Einflussgrößen", "Modelldetails"])
+    with prediction_tab:
+        result_plots.predictions(rows, metrics, r["config"])
+        with st.expander("Einzelne Testfälle"):
+            filtered = rows
+            if rows["group"].notna().any():
+                selected = st.multiselect("Tabelle nach Einheit filtern", rows["group"].dropna().unique().tolist())
+                if selected:
+                    filtered = rows[rows["group"].isin(selected)]
+            st.caption("Kennzahlen beziehen sich auf alle Testfälle; Tabellenfilter ändern sie nicht. source_row = logische CSV-Datenzeile einschließlich Kopfzeile.")
+            st.dataframe(filtered, use_container_width=True, hide_index=True)
+    with effect_tab:
+        result_plots.coefficients(model)
+        result_plots.pca(model, r["config"]["task"])
+        if model.get("design_coefficients"):
+            design = model["design_coefficients"]
+            st.subheader("Regressionskoeffizienten in Designeinheiten")
+            st.caption(design["note"])
+            st.dataframe(pd.DataFrame(design["rows"]), hide_index=True)
+            st.download_button("Koeffizienten CSV", safe_csv(design["rows"]), "qm-coefficients.csv", "text/csv", key="coefficients_csv")
         else:
-            fig = px.scatter(rows, x="observed", y="prediction", labels={"observed": "Beobachtet", "prediction": "Vorhergesagt"})
-            bounds = [min(rows.observed.min(), rows.prediction.min()), max(rows.observed.max(), rows.prediction.max())]
-            fig.add_scatter(x=bounds, y=bounds, mode="lines", name="Ideale Vorhersage", line={"dash": "dash"})
-    st.plotly_chart(fig, use_container_width=True)
-    if model.get("conditional_curve"):
-        curve = model["conditional_curve"]
-        st.caption(curve["note"])
-        st.plotly_chart(px.line(pd.DataFrame(curve["rows"]), x="x", y="prediction", color="group", labels={"x": curve["feature"], "prediction": "Bedingte Modellvorhersage"}), use_container_width=True)
-    filtered = rows
-    if rows["group"].notna().any():
-        selected = st.multiselect("Tabelle nach Einheit filtern", rows["group"].dropna().unique().tolist())
-        if selected:
-            filtered = rows[rows["group"].isin(selected)]
-    st.caption("Kennzahlen beziehen sich auf den gesamten Testteil; Tabellenfilter ändern sie nicht. source_row = logische CSV-Datenzeile einschließlich Kopfzeile.")
-    st.dataframe(filtered, use_container_width=True, hide_index=True)
-    with st.expander("Modell, Referenz, Diagnostik und Grenzen"):
-        st.write(r["structure"])
-        for warning in r["warnings"]:
-            st.warning(warning)
-        st.write("Referenzvorhersage (Trainingsmittelwert / häufigste Trainingsklasse)", model["baseline"])
-        st.write("Gewählte Modellparameter", model["parameters"])
+            st.caption("Älterer Lauf: unskalierte Designeinheiten und Aufbereitungsmetadaten wurden noch nicht gespeichert. Standardisierte Koeffizienten sind unter Modelldetails verfügbar.")
+    with detail_tab:
+        st.subheader("Standardisierte Koeffizienten und Intercept")
         st.caption(model["coefficient_scale"])
-        st.dataframe(pd.DataFrame(model["coefficients"]), hide_index=True)
+        st.dataframe(pd.DataFrame([{"feature":"Intercept", "coefficient":model["intercept"]}] + model["coefficients"]), hide_index=True)
         st.write("Kategorienreferenzen", model["category_references"])
+        if model.get("preprocessing"):
+            prep = model["preprocessing"]
+            st.caption(prep["note"])
+            first = prep["first_chain"]
+            if first.get("mode") == "pca":
+                st.write("PCA-Eingangsstandardisierung: Trainingsmittel und Standardabweichungen", {"Mittel":first["pca"]["input_means"], "Standardabweichung":first["pca"]["input_scales"]})
+            else:
+                st.write("Abgezogene numerische Trainingsbezugswerte", first["numeric_centers"])
+            if first.get("time_center") is not None:
+                st.write("Zeitbezug: Trainingsmittel des Counters (Zeitstempel in Tagen seit Unix-Epoche)", first["time_center"])
+            st.dataframe(pd.DataFrame(first["design_scaling"]), hide_index=True)
+            with st.expander("Vollständige Aufbereitungsmetadaten aller Modelle/Imputationen"):
+                st.json(prep)
         if model.get("inference"):
+            st.subheader("Trainingsinferenz · standardisierte Designmatrix")
             st.caption(model["inference"]["note"])
             if "coefficients" in model["inference"]:
                 st.dataframe(pd.DataFrame(model["inference"]["coefficients"]), hide_index=True)
-        if r["config"]["task"] == "linear":
-            st.plotly_chart(px.scatter(rows, x="prediction", y="residual", labels={"prediction": "Vorhersage", "residual": "Residuum"}), use_container_width=True)
+                st.caption("Intervalle: 95 %. Nicht mit der Tabelle in unskalierten Designeinheiten vermischen.")
+        else:
+            st.info("Keine klassische Koeffizienteninferenz für diesen Modellpfad. Regularisierung, PCA oder fehlende Werte können gewöhnliche Intervalle und p-Werte ungeeignet machen.")
         if r.get("pooled_inference"):
             st.write(r["pooled_inference"]["scope"])
+            st.caption("Separater retrospektiver MICE-Pfad auf ursprünglichen numerischen Einheiten, keine Intervalle des Vorhersageensembles.")
             st.dataframe(pd.DataFrame(r["pooled_inference"]["coefficients"]), hide_index=True)
+        st.write("Gewählte Modellparameter", model["parameters"])
+        st.write("Erkannte Datenstruktur (Vorschlag)", r["structure"])
+        for warning in r["warnings"]:
+            st.warning(warning)
         st.json(r["config"])
     try:
         html = request("GET", f"/analyses/{run['id']}/report").content

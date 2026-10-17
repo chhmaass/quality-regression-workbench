@@ -15,9 +15,10 @@ def render():
     st.subheader("1 · Daten laden und prüfen")
     left, right = st.columns([1, 2])
     with left:
+        example = st.selectbox("Beispieldatensatz", ["QM-Prozess", "Korrelierte Sensoren (PCA)"])
         if st.button("Synthetisches QM-Beispiel laden", use_container_width=True):
             try:
-                use_dataset(request("POST", "/datasets/demo").json())
+                use_dataset(request("POST", "/datasets/demo-pca" if example == "Korrelierte Sensoren (PCA)" else "/datasets/demo").json())
                 st.rerun()
             except (httpx.HTTPError, ValueError) as exc:
                 st.error(str(exc))
@@ -88,7 +89,7 @@ def render():
         c["boundary_inclusive"] = w("checkbox", "boundary_inclusive", "Wert genau auf der Grenze ist zulässig", value=True)
     eligible = [x for x in cols if x not in {target, c.get("nominal"), c.get("lower_column"), c.get("upper_column")}]
     c["numeric"] = w("multiselect", "numeric", "Numerische Features", eligible,
-                      default=[x for x in ["temperature", "throughput", "operating_hours"] if x in eligible])
+                      default=[x for x in ["temperature", "throughput", "operating_hours", "sensor_pressure", "sensor_flow", "sensor_current", "sensor_temperature", "sensor_vibration", "sensor_load"] if x in eligible])
     cats = [x for x in eligible if x not in c["numeric"]]
     c["categorical"] = w("multiselect", "categorical", "Kategoriale / binäre Features", cats,
                           default=["machine_type"] if "machine_type" in cats else [])
@@ -105,6 +106,16 @@ def render():
         c["threshold"] = w("slider", "threshold", "Wahrscheinlichkeitsschwelle für positive Vorhersage", .01, .99, .5, .01)
         st.caption("Ab dieser geschätzten Wahrscheinlichkeit wird positiv vorhergesagt. Die Schwelle ändert keine Toleranzgrenzen und keine tatsächlichen Zielwerte. Vor der Testbewertung festlegen.")
     with st.expander("Erweiterte Einstellungen · Fehlwerte, Zeit, Interaktionen"):
+        mode_label = w("selectbox", "feature_mode_label", "Feature Engineering", ["Direkte Features", "Hauptkomponenten (PCA)"])
+        pca = mode_label == "Hauptkomponenten (PCA)"
+        c["feature_mode"] = "pca" if pca else "direct"
+        if pca:
+            c["pca_components"] = w("number_input", "pca_components", "Anzahl Hauptkomponenten", 1, 25, 2)
+            c["center_numeric"] = False
+            st.info("PCA standardisiert numerische Trainingsfeatures und bildet daraus Komponenten. Kategorien bleiben separat. Keine Kombination mit MICE, Interaktionen oder Zeitpolynomen; zeitliche und gruppierte Tests bleiben verfügbar.")
+        else:
+            c["center_numeric"] = w("checkbox", "center_numeric", "Numerische Features vor Interaktionen zentrieren", value=True)
+            st.caption("Trainingsmittel abziehen, dann Interaktionen bilden. Zeitcounter wird bereits um seinen Trainingsmittelwert zentriert; danach wird quadriert. Zentrierung allein garantiert keine höhere Modellgüte.")
         c["imputation"] = METHODS[w("selectbox", "imputation_label", "Fehlwertbehandlung", list(METHODS))]
         ent = w("selectbox", "entity", "Einheit-ID (Metadatum, keine Maschinen-FE)", ["Keine"] + cols)
         c["entity"] = None if ent == "Keine" else ent
@@ -112,13 +123,13 @@ def render():
         c["time"] = None if ts == "Keine" else ts
         if c["time"]:
             c["time_source"] = "datetime" if w("radio", "time_format", "Zeitformat", ["Zeitstempel", "Numerischer Counter"], horizontal=True) == "Zeitstempel" else "numeric"
-            c["time_feature"] = w("checkbox", "time_feature", "Zeitcounter als Feature")
+            c["time_feature"] = w("checkbox", "time_feature", "Zeitcounter als Feature", disabled=pca) and not pca
             square = w("checkbox", "time_squared", "Zusätzlich Zeitcounter²", disabled=not c["time_feature"])
             c["time_squared"] = square and c["time_feature"]
         features = c["numeric"] + c["categorical"] + (["__time"] if c.get("time_feature") else []) + (["__time2"] if c.get("time_squared") else [])
         pairs = [(x, y) for i, x in enumerate(features) for y in features[i+1:]]
         labels = {f"{x} × {y}": [x, y] for x, y in pairs}
-        chosen = w("multiselect", "interactions", "Ausgewählte Interaktionen (maximal 12)", list(labels), max_selections=12)
+        chosen = w("multiselect", "interactions", "Ausgewählte Interaktionen (maximal 12)", [] if pca else list(labels), max_selections=12, disabled=pca)
         c["interactions"] = [labels[x] for x in chosen]
         effect = w("selectbox", "effect_feature", "Optionales Einflussdiagramm", ["Keines"] + c["numeric"] + (["__time"] if c.get("time_feature") else []))
         if effect != "Keines":
@@ -126,6 +137,10 @@ def render():
             group = w("selectbox", "effect_group", "Diagramm nach Kategorie aufteilen", ["Keine"] + c["categorical"])
             if group != "Keine":
                 c["effect_group"] = group
+            else:
+                modifier = w("selectbox", "effect_modifier", "Kurven nach numerischem Feature vergleichen", ["Keine"] + [x for x in c["numeric"] if x != effect])
+                if modifier != "Keine":
+                    c["effect_modifier"] = modifier
         c["test_fraction"] = w("slider", "test_fraction", "Anteil Testdaten", .15, .35, .2, .05)
         c["seed"] = w("number_input", "seed", "Reproduzierbarer Seed", 0, 2147483647, 42)
         if c["imputation"] == "mice":

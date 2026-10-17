@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from . import __version__
 from .analysis import analyze, prepare_analysis, get_splits
-from .data import MAX_BYTES, demo_data, parse_csv, quality, build_target
+from .data import MAX_BYTES, demo_data, parse_csv, quality, build_target, demo_pca_data
 from .report import html_report, safe_csv
 from .schemas import AnalysisConfig
 from .storage import AnalysisRun, Base, Dataset, engine, session_factory
@@ -96,6 +96,11 @@ async def upload(file: UploadFile):
 @app.post("/datasets/demo", dependencies=[Depends(authenticate)])
 def demo():
     return persist_dataset(demo_data().to_csv(index=False).encode(), "synthetic-qm.csv")
+
+
+@app.post("/datasets/demo-pca", dependencies=[Depends(authenticate)])
+def demo_pca():
+    return persist_dataset(demo_pca_data().to_csv(index=False).encode(), "synthetic-pca-sensors.csv")
 
 
 @app.get("/datasets/{dataset_id}", dependencies=[Depends(authenticate)])

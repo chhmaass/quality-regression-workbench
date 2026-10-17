@@ -20,7 +20,7 @@ from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from qmworkbench.data import demo_data
+from qmworkbench.data import demo_data, demo_pca_data
 
 
 def widget(app, kind, label):
@@ -140,7 +140,7 @@ def main():
                 assert max(r["train_source_rows"]) < min(r["test_source_rows"])
                 names = [x["feature"] for x in r["models"]["reference"]["coefficients"]]
                 assert "__time2" in names and "temperature × throughput" in names
-                widget(app, "checkbox", "Zeitverlauf statt Vorhersagevergleich").check().run()
+                widget(app, "checkbox", "Zeitverlauf anzeigen").check().run()
                 assert not app.exception and not app.error
 
                 app = new_app()
@@ -157,6 +157,47 @@ def main():
                 widget(app, "number_input", "Untere Grenze").set_value(-2.).run()
                 widget(app, "number_input", "Obere Grenze").set_value(2.).run()
                 finish(app, "5 Invalid limits rejected, duplicate CSV rejected, wrong key rejected, corrected input works")
+
+                app = new_app(demo_pca_data(300))
+                widget(app, "selectbox", "Feature Engineering").set_value("Hauptkomponenten (PCA)").run()
+                r = finish(app, "6 PCA linear: six correlated sensors to two components, categorical input, missing values, Elastic Net")
+                assert len(app.tabs) == 3 and len(app.get("plotly_chart")) >= 6
+                assert r["models"]["reference"]["preprocessing"]["first_chain"]["pca"]["n_components"] == 2
+                # Invalid PCA/MICE combination is blocked before fitting.
+                app.switch_page("views/prepare.py").run()
+                widget(app, "selectbox", "Fehlwertbehandlung").set_value("MICE (mehrere Imputationen)").run()
+                assert widget(app, "button", "Analyse starten").disabled and app.error
+
+                app = new_app(demo_pca_data(300))
+                widget(app, "radio", "Was möchten Sie untersuchen?").set_value("Toleranzverletzung vorhersagen").run()
+                widget(app, "selectbox", "Feature Engineering").set_value("Hauptkomponenten (PCA)").run()
+                widget(app, "selectbox", "Was soll die Testbewertung abbilden?").set_value("Neue Einheiten").run()
+                widget(app, "selectbox", "Einheit-ID (Metadatum, keine Maschinen-FE)").set_value("machine_id").run()
+                r = finish(app, "7 PCA logistic: grouped holdout, odds ratios, probabilities, component plots")
+                assert len(app.tabs) == 3 and len(app.get("plotly_chart")) >= 7
+                assert "odds_ratio" in r["models"]["reference"]["design_coefficients"]["rows"][1]
+
+                app = new_app(demo_data(300).dropna().reset_index(drop=True))
+                widget(app, "multiselect", "Numerische Features").set_value(["temperature", "throughput"]).run()
+                widget(app, "multiselect", "Ausgewählte Interaktionen (maximal 12)").set_value(["temperature × throughput"]).run()
+                widget(app, "selectbox", "Optionales Einflussdiagramm").set_value("temperature").run()
+                widget(app, "selectbox", "Kurven nach numerischem Feature vergleichen").set_value("throughput").run()
+                r = finish(app, "8 Centered interaction regression: numerical effect curves, coefficient units, HC3 intervals")
+                assert r["config"]["center_numeric"] and r["models"]["reference"]["inference"]
+                assert len(r["models"]["reference"]["conditional_curve"]["rows"]) == 90
+
+                # A saved result from before this release remains displayable.
+                import copy
+                legacy = copy.deepcopy(app.session_state["run"])
+                for name in ["center_numeric", "feature_mode", "pca_components", "effect_modifier"]:
+                    legacy["result"]["config"].pop(name, None)
+                for model in legacy["result"]["models"].values():
+                    for name in ["preprocessing", "pca_scores", "design_coefficients"]:
+                        model.pop(name, None)
+                app.session_state["run"] = legacy
+                app.run()
+                assert not app.exception and not app.error and len(app.metric) == 2
+                print("Legacy result rendering: PASS", file=sys.stderr)
         finally:
             server.terminate()
             server.wait(timeout=10)

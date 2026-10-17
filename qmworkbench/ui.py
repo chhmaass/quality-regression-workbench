@@ -65,7 +65,9 @@ def use_dataset(ds, config=None):
 
 
 def restore_config(c):
-    values = dict(c)
+    values = AnalysisConfig(**c).model_dump(mode="json")
+    values["feature_mode_label"] = "Hauptkomponenten (PCA)" if c.get("feature_mode") == "pca" else "Direkte Features"
+    values["effect_modifier"] = c.get("effect_modifier") or "Keine"
     values["task_label"] = next(k for k, v in TASKS.items() if v == c["task"])
     values["mode_label"] = {"column": "Vorhandene Spalte", "deviation": "Istwert minus Sollwert", "limits": "Aus Toleranzgrenzen"}[c["target_mode"]]
     values["split_label"] = next(k for k, v in SPLITS.items() if v == c["split"])
@@ -93,7 +95,7 @@ def draft_changed(run):
     draft = st.session_state.get("draft")
     if not draft:
         return False
-    return draft["digest"] != run["result"]["dataset_digest"] or draft["config"] != run["result"]["config"]
+    return draft["digest"] != run["result"]["dataset_digest"] or draft["config"] != AnalysisConfig(**run["result"]["config"]).model_dump(mode="json")
 
 
 def preview(ds, config):
@@ -128,6 +130,10 @@ def describe_config(c):
     if c.get("time_squared"):
         features.append("Zeitcounter²")
     st.write("**Eingangsgrößen:** " + ", ".join(features))
+    if c.get("feature_mode") == "pca":
+        st.write(f"**Aufbereitung:** Standardisierung → PCA mit {c['pca_components']} Komponenten; Kategorien separat.")
+    else:
+        st.write("**Aufbereitung:** " + ("Numerische Features vor Interaktionen um Trainingsmittel zentriert." if c.get("center_numeric") else "Numerische Features vor Interaktionen nicht zentriert.") + " Designspalten anschließend standardisiert.")
     if c.get("interactions"):
         st.write("**Interaktionen:** " + ", ".join(" × ".join(p) for p in c["interactions"]))
     split = next(k for k, v in SPLITS.items() if v == c["split"])
