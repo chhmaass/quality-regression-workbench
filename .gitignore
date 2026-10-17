@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.db
+*.sqlite*
+.env
+.streamlit/secrets.toml
+*.egg-info/
+artifacts/
+test-results/

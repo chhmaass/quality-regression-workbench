@@ -1,0 +1,13 @@
+{
+  "target": "deviation",
+  "numeric": ["temperature", "throughput"],
+  "categorical": ["machine_type"],
+  "time": "timestamp",
+  "time_source": "datetime",
+  "time_feature": true,
+  "time_squared": true,
+  "split": "time",
+  "interactions": [["temperature", "throughput"], ["__time", "machine_type"]],
+  "effect_feature": "__time",
+  "effect_group": "machine_type"
+}

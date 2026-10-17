@@ -1,0 +1,8 @@
+{
+  "target": "deviation",
+  "numeric": ["temperature", "throughput", "operating_hours"],
+  "categorical": ["machine_type"],
+  "compare_elastic": true,
+  "effect_feature": "throughput",
+  "effect_group": "machine_type"
+}

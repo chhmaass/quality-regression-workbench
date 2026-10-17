@@ -1,0 +1,11 @@
+{
+  "task": "logistic",
+  "target_mode": "limits",
+  "target": "deviation",
+  "lower": -2,
+  "upper": 2,
+  "numeric": ["temperature", "throughput", "operating_hours"],
+  "categorical": ["machine_type"],
+  "compare_elastic": true,
+  "threshold": 0.5
+}

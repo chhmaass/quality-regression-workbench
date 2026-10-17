@@ -1,0 +1,9 @@
+{
+  "target": "deviation",
+  "numeric": ["temperature", "throughput"],
+  "imputation": "mice",
+  "imputations": 5,
+  "mice_iterations": 10,
+  "pooled_inference": true,
+  "compare_elastic": false
+}
