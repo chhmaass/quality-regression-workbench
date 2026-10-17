@@ -25,6 +25,7 @@ jobs:
       - run: pip install -r requirements.lock
       - run: pytest -q
       - run: python -m scripts.ui_smoke
+      - run: python -m scripts.user_scenarios
       - name: PostgreSQL migration and round trip
         env:
           DATABASE_URL: postgresql+psycopg://workbench:test-only@localhost:5432/workbench

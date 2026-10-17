@@ -46,3 +46,42 @@ def test_validation_errors_are_not_internal_errors(client):
 def test_no_secret_no_unprotected_access(client, monkeypatch):
     monkeypatch.delenv("WORKBENCH_API_KEY")
     assert client.post("/datasets/demo").status_code == 503
+
+
+def test_target_preview_matches_analysis_and_excludes_unknown_values(client):
+    import numpy as np
+    from qmworkbench.data import demo_data
+    frame = demo_data(120)
+    frame.loc[100, "deviation"] = np.nan  # Outside the ten-row display preview.
+    frame.loc[101, "lower"] = np.nan
+    client.headers["X-API-Key"] = "test-secret"
+    ds = client.post("/datasets", files={"file": ("preview.csv", frame.to_csv(index=False).encode(), "text/csv")}).json()
+    config = {"task": "logistic", "target_mode": "limits", "target": "deviation", "lower_column": "lower", "upper_column": "upper",
+              "numeric": ["temperature", "throughput"], "compare_elastic": False, "imputation": "complete"}
+    response = client.post(f"/datasets/{ds['id']}/preview", json=config)
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    run = client.post(f"/datasets/{ds['id']}/analyses", json=config).json()
+    r = run["result"]
+    assert run["dataset_id"] == ds["id"]
+    assert preview["unknown_target"] == r["unknown_target"] == 2
+    assert preview["eligible"] == r["n_eligible"]
+    assert preview["excluded"] == r["excluded"]
+    assert preview["n_train"] == r["n_train"] and preview["n_test"] == r["n_test"]
+    assert preview["positive"] + preview["negative"] == 118
+    changed_threshold = client.post(f"/datasets/{ds['id']}/preview", json=dict(config, threshold=.8)).json()
+    assert changed_threshold == preview  # Classification threshold does not redefine targets.
+    client.headers.clear()
+    assert client.post(f"/datasets/{ds['id']}/preview", json=config).status_code == 401
+
+
+def test_preview_rejects_invalid_limits_and_split_before_training(client):
+    client.headers["X-API-Key"] = "test-secret"
+    ds = client.post("/datasets/demo").json()
+    url = f"/datasets/{ds['id']}/preview"
+    for config in [
+        {"task": "logistic", "target_mode": "limits", "target": "deviation", "numeric": ["throughput"], "lower": 3, "upper": -3},
+        {"target": "deviation", "numeric": ["throughput"], "split": "group"},
+        {"target": "deviation", "numeric": ["throughput"], "split": "time", "time": "missing"},
+    ]:
+        assert client.post(url, json=config).status_code == 422

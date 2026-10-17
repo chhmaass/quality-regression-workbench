@@ -15,8 +15,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from . import __version__
-from .analysis import analyze
-from .data import MAX_BYTES, demo_data, parse_csv, quality
+from .analysis import analyze, prepare_analysis, get_splits
+from .data import MAX_BYTES, demo_data, parse_csv, quality, build_target
 from .report import html_report, safe_csv
 from .schemas import AnalysisConfig
 from .storage import AnalysisRun, Base, Dataset, engine, session_factory
@@ -117,6 +117,25 @@ def clean_json(value):
     return value
 
 
+@app.post("/datasets/{dataset_id}/preview", dependencies=[Depends(authenticate)])
+def preview_analysis(dataset_id: str, config: AnalysisConfig):
+    """Target counts and split checks without fitting models or saving a run."""
+    with session_factory()() as session:
+        obj = read_dataset(session, dataset_id)
+        frame = pd.read_json(io.StringIO(obj.data), orient="split", convert_dates=False)
+        try:
+            X, y, _ = prepare_analysis(frame, config)
+            train, test, _ = get_splits(X, y, config)
+            target = build_target(frame, config)
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            raise HTTPException(422, str(exc))
+        return {"rows": len(frame), "unknown_target": int(target.isna().sum()),
+                "eligible": len(y), "excluded": len(frame) - len(y),
+                "positive": int((target == 1).sum()) if config.task == "logistic" else None,
+                "negative": int((target == 0).sum()) if config.task == "logistic" else None,
+                "n_train": len(train), "n_test": len(test)}
+
+
 @app.post("/datasets/{dataset_id}/analyses", dependencies=[Depends(authenticate)])
 def run_analysis(dataset_id: str, config: AnalysisConfig):
     if not analysis_lock.acquire(blocking=False):
@@ -134,7 +153,7 @@ def run_analysis(dataset_id: str, config: AnalysisConfig):
             run = AnalysisRun(dataset_id=dataset_id, result=result, artifact=artifact)
             session.add(run)
             session.commit()
-            return {"id": run.id, "result": result, "created_at": iso_utc(run.created_at)}
+            return {"id": run.id, "dataset_id": dataset_id, "result": result, "created_at": iso_utc(run.created_at)}
     except HTTPException:
         raise
     except Exception:
@@ -155,7 +174,7 @@ def fetch_run(session, run_id):
 def get_run(run_id: str):
     with session_factory()() as session:
         run = fetch_run(session, run_id)
-        return {"id": run.id, "result": run.result, "created_at": iso_utc(run.created_at)}
+        return {"id": run.id, "dataset_id": run.dataset_id, "result": run.result, "created_at": iso_utc(run.created_at)}
 
 
 @app.get("/analyses/{run_id}/report", dependencies=[Depends(authenticate)], response_class=HTMLResponse)

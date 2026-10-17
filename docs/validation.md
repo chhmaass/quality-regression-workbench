@@ -28,3 +28,16 @@ Prüflauf: https://github.com/chhmaass/quality-regression-workbench/actions/runs
 - Visuelle Browserprüfung über verschiedene Bildschirmgrößen. AppTest prüft Widgets und Abläufe, keine Pixelgestaltung.
 
 Der erste Stand ist ein funktionsgeprüfter Portfolio-Prototyp mit dokumentierten Methodengrenzen. Ein realer QM-Datenbestand erfordert eine eigene fachliche Abnahme.
+
+
+## UX-Update vom 17. Oktober 2026
+
+Lokal erfolgreich ausgeführt:
+
+- 22 pytest-Prüfungen; darunter vollständige Target-Vorschau mit Fehlwerten außerhalb der zehn Vorschauzeilen, identische Fallzahlen zwischen Vorschau und Analyse, Zugriffsschutz und ungültige Grenzen/Splits.
+- `scripts.ui_smoke`: lineare und logistische Analyse über reales HTTP-Backend und Streamlit AppTest, getrennte Seiten, erhaltene Eingaben/Zugang beim Seitenwechsel, Hinweis auf veraltete Ergebnisse, gesperrter Start bei ungültigen Grenzen sowie Öffnen und Bearbeiten eines gespeicherten Laufs in neuer Sitzung.
+- `scripts.user_scenarios`: fünf Szenarien mit unabhängiger Nachrechnung von RMSE bzw. Accuracy/Precision/Recall/Konfusionsmatrix, HTML-/CSV-Export und Persistenz. Szenarien: lineare Regression mit Kategorien/Elastic Net; logistische Regression aus Toleranzgrenzen bei Schwelle 0,65; CSV mit Fehlwerten/MICE/gepoolter Inferenz; zeitlicher Testschnitt mit Zeitquadrat und Interaktionen; ungültige Eingaben und Korrektur. Alle fünf bestanden. Gespeicherte Konfigurationen einschließlich MICE und Interaktionen wurden in neuen UI-Sitzungen vollständig wiederhergestellt.
+
+Die lokalen Integrationstests verwenden eine isolierte SQLite-Datenbank. Der CSV-Dateiinhalt wird per Multipart-HTTP importiert, weil AppTest den Dateiauswahldialog nicht automatisiert. Ein kompletter authentifizierter Browserdurchlauf auf Railway ist dadurch nicht nachgewiesen. GitHub Actions führt dieselben Abläufe und zusätzlich die PostgreSQL-Migrations-/Persistenzprüfung aus; der Status des jeweiligen Commits ist maßgeblich.
+
+Die ursprünglichen Railway-Dienste (API, UI und PostgreSQL) waren vor diesem Update online mit SUCCESS. Neue Deployments müssen nach dem GitHub-Update getrennt geprüft werden.

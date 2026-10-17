@@ -154,8 +154,8 @@ def reference_inference(pipeline, Xtrain, ytrain, c):
                               "p_value": float(result.pvalues[i])} for i, name in enumerate(names)]}
 
 
-def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
-    started = time.monotonic()
+def prepare_analysis(df: pd.DataFrame, c: AnalysisConfig):
+    """Validate and select eligible rows identically for preview and training."""
     required = set(c.numeric + c.categorical + [c.target])
     required |= {x for x in [c.nominal, c.lower_column, c.upper_column, c.entity, c.time] if x}
     if required - set(df.columns):
@@ -189,6 +189,12 @@ def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
         raise ValueError("Mindestens 50 auswertbare Fälle erforderlich.")
     if c.task == "logistic" and (y.nunique() != 2 or y.value_counts().min() < 8):
         raise ValueError("Binäre Regression benötigt mindestens 8 Fälle je Klasse.")
+    return X, y, source_rows
+
+
+def analyze(df: pd.DataFrame, c: AnalysisConfig) -> tuple[dict, bytes]:
+    started = time.monotonic()
+    X, y, source_rows = prepare_analysis(df, c)
     train, test, folds = get_splits(X, y, c)
     Xtrain, Xtest = X.iloc[train], X.iloc[test]
     ytrain, ytest = y.iloc[train], y.iloc[test]

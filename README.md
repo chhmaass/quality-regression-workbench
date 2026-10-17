@@ -6,7 +6,10 @@ Eine kleine QM-Regressionswerkstatt: CSV-Daten prüfen, Einflussgrößen untersu
 
 ## Was funktioniert?
 
+- Getrennte Seiten **Analyse vorbereiten** und **Ergebnis und Bericht**; Eingaben bleiben beim Wechsel erhalten.
 - UTF-8-CSV importieren, Spaltenrollen frei zuordnen und Fehlwerte prüfen.
+- Targetdefinition, Klassenverteilung, Fallzahlen und Testaufteilung vor dem Start prüfen.
+- Ungültige Grundeinstellungen sperren den Start; geänderte Einstellungen kennzeichnen alte Ergebnisse.
 - Numerisches Target direkt wählen oder Istwert minus Sollwert berechnen.
 - Binäres Target direkt wählen oder aus ein-/zweiseitigen Toleranzgrenzen erzeugen.
 - Numerische und kategoriale Features, ausgewählte Interaktionen, Zeitcounter und Zeitcounter².
@@ -44,10 +47,10 @@ Alternativ mit Docker Compose: `.env.example` nach `.env` kopieren, **beide Pass
 ## Fünf-Minuten-Demo
 
 1. Zugangsschlüssel eingeben und **Synthetisches QM-Beispiel laden**.
-2. Numerisches Target `deviation`, Features `temperature`, `throughput`, `operating_hours` und Kategorie `machine_type` übernehmen. Analyse starten.
+2. **Qualitätsabweichung erklären** mit Target `deviation`, Features `temperature`, `throughput`, `operating_hours` und Kategorie `machine_type` übernehmen. Analyse starten; die App öffnet die Ergebnisseite.
 3. Test-R²/RMSE und Referenzvorhersage vergleichen; Koeffizienten sind auf standardisierte Designspalten bezogen.
-4. Auf **Binäres Target** wechseln und `violation` wählen. Accuracy, Precision, Recall und die Konfusionsmatrix prüfen. Positive Klasse ist `1`.
-5. Eine neue Analyse mit anderer Wahrscheinlichkeitsschwelle starten. Den Einfluss auf Fehlalarme und übersehene Verletzungen erklären; nachträgliches Testdaten-Tuning ist explorativ.
+4. Über **Konfiguration bearbeiten** zurückgehen, **Toleranzverletzung vorhersagen** wählen und `violation` wählen. Accuracy, Precision, Recall und die Konfusionsmatrix prüfen. Positive Klasse ist `1`.
+5. In der Zusammenfassung Targetdefinition und Testdesign prüfen. Eine neue Analyse mit anderer Wahrscheinlichkeitsschwelle starten. Den Einfluss auf Fehlalarme und übersehene Verletzungen erklären; nachträgliches Testdaten-Tuning ist explorativ.
 6. HTML-Bericht und CSV herunterladen. HTML im Browser über „Drucken → PDF“ ausgeben.
 
 Für Zeittrends: `timestamp` auswählen, Zeitcounter/Quadrat aktivieren und **Zukünftige Zeiträume** als Testdesign wählen. Für eine ausgewählte Interaktion unter den erweiterten Einstellungen ein Paar hinzufügen. MICE dabei ausschalten, da dieser Methodenmix in v0.1 gesperrt ist.
@@ -71,6 +74,7 @@ Eine Messwert-Verletzungsquote ist keine Geräte-Ausschussquote. Istwert, Abweic
 | `POST /datasets` | Multipart-Upload im Feld `file` |
 | `POST /datasets/demo` | Reproduzierbare synthetische Daten |
 | `GET /datasets/{id}` | Vorschau und Datenqualität |
+| `POST /datasets/{id}/preview` | Target-/Fallzahlen und Testaufteilung ohne Modellschätzung oder Speicherung |
 | `POST /datasets/{id}/analyses` | Validierte Analysekonfiguration ausführen |
 | `GET /analyses/{id}` | Gespeichertes Ergebnis |
 | `GET /analyses/{id}/report` | Druckbarer HTML-Bericht |
@@ -105,6 +109,7 @@ Siehe [docs/railway.md](docs/railway.md): ein Repository, zwei Dienste (`SERVICE
 ```bash
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m scripts.ui_smoke
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m scripts.user_scenarios
 ```
 
 Tests prüfen unter anderem Targetgrenzen, unbekannte Targets, Kennzahlen gegen handrechenbare Fälle, Gruppentrennung, zeitliche Fold-Grenzen, Trainingsimputation, Interaktionen, Zeitquadrat, MICE-Reproduzierbarkeit, API-Zugriffsschutz und Export. GitHub Actions enthält zusätzlich einen PostgreSQL-Migrations-/Persistenztest. Ein erfolgreicher lokaler SQLite-Test ist kein Nachweis eines bereits ausgeführten PostgreSQL- oder Railway-Deployments.

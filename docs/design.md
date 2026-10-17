@@ -36,3 +36,12 @@ Die Wahl des endgültigen Modells erfolgt nicht anhand des Testfehlers. Beide Mo
 5. Fehlende Werte und gesperrte Kombinationen werden verständlich gemeldet.
 
 Bereits entwickelte Funktionen sind Vorleistungen für ein späteres IHK-Projekt. Ein zukünftiger betrieblicher Auftrag muss fachlich echt, noch offen und gesondert abgegrenzt sein.
+
+
+## Geführte Oberfläche
+
+Der Streamlit-Einstieg registriert zwei echte Seiten mit `st.navigation`: Vorbereitung unter `/` und Ergebnisse unter `/results`. Gemeinsamer Zugang und editierbare Einstellungen bleiben in der Sitzung erhalten. Nach erfolgreicher Schätzung wechselt die App zur Ergebnisseite. Die Rückkehr verändert den gespeicherten Lauf nicht. Ein anderer Datensatz oder eine abweichende normalisierte Konfiguration kennzeichnet bisherige Ergebnisse als nicht zur aktuellen Vorbereitung gehörig.
+
+`POST /datasets/{id}/preview` verwendet dieselbe Datenaufbereitung und Splitprüfung wie die Schätzung. Die Vorschau arbeitet auf dem vollständigen Datensatz und schätzt keine Modelle. Klassenanteile beziehen sich auf bekannte Targets vor weiteren Fehlwertausschlüssen; auswertbare Fälle berücksichtigen die gewählte Fehlwertbehandlung. Weitere Prüfungen der Designmatrix und Konvergenz finden während der Schätzung statt. Die Vorschau wird nur innerhalb derselben UI-Sitzung für unveränderte Daten, Konfiguration und Zugang zwischengespeichert.
+
+Gespeicherte Läufe liefern zusätzlich ihre `dataset_id`. Das Öffnen eines Laufs stellt den zugehörigen Datensatz und seine Konfiguration als bearbeitbaren Entwurf wieder her; das Original bleibt unverändert. Es wird keine Lauf-ID über die URL geladen.
