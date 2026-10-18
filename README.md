@@ -1,31 +1,105 @@
 # Quality Regression Workbench
 
-Eine kleine QM-Regressionswerkstatt: CSV-Daten prüfen, Einflussgrößen untersuchen und Toleranzverletzungen vorhersagen. Die Oberfläche ist deutsch; der Quellcode ist englisch benannt.
+[![Tests](https://github.com/chhmaass/quality-regression-workbench/actions/workflows/tests.yml/badge.svg)](https://github.com/chhmaass/quality-regression-workbench/actions/workflows/tests.yml)
 
-**Portfolio-Prototyp, kein validiertes Produktionssystem.** Synthetische Beispiele beschreiben keinen konkreten Unternehmensprozess. Beobachtungsanalysen liefern keine automatischen Kausalitätsnachweise.
+**Messdaten aufbereiten, Qualitätsabweichungen untersuchen und Vorhersagen nachvollziehbar bewerten.**
 
-## Was funktioniert?
+Eine Python-Anwendung für die Verbindung von Qualitätsmanagement, statistischer Analyse und Softwareentwicklung. Aus einer CSV-Datei entsteht ein gespeicherter Analyselauf mit expliziter Targetdefinition, ausgewählten Einflussgrößen, Bewertung an zurückgehaltenen Testfällen und exportierbarem Bericht.
 
-- Drei Arbeitsbereiche: **Analyse vorbereiten**, **Ergebnis und Bericht**, **Gespeicherte Daten**; Eingaben bleiben beim Wechsel erhalten.
-- Gespeicherte Datensätze mit Importdatum und Laufanzahl durchsuchen, Läufe öffnen und nach ausdrücklicher Bestätigung löschen. Datensatzlöschung entfernt zugehörige Läufe und Modelle in einer Transaktion. Alle Zugänge mit demselben Schlüssel teilen diesen Datenbestand.
-- UTF-8-CSV importieren, Spaltenrollen frei zuordnen und Fehlwerte prüfen.
-- Targetdefinition, Klassenverteilung, Fallzahlen und Testaufteilung vor dem Start prüfen.
-- Ungültige Grundeinstellungen sperren den Start; geänderte Einstellungen kennzeichnen alte Ergebnisse.
-- Numerisches Target direkt wählen oder Istwert minus Sollwert berechnen.
-- Binäres Target direkt wählen oder aus ein-/zweiseitigen Toleranzgrenzen erzeugen.
-- Numerische und kategoriale Features, Zentrierung vor ausgewählten Interaktionen, Zeitcounter und Zeitcounter².
-- Optionaler PCA-Pfad: numerische Trainingsfeatures standardisieren, auf feste Komponentenanzahl verdichten und Kategorien separat codieren.
-- Ergebnisreiter **Vorhersagen**, **Einflussgrößen**, **Modelldetails** mit Residuen-/Zeitplots, Wahrscheinlichkeiten, Koeffizienten, Odds Ratios und PCA-Grafiken.
-- Lineare/logistische Referenzregression mit optionalem Elastic-Net-Vergleich.
-- Fold-lokale Aufbereitung und Zufalls-, Gruppen- oder Zeitvalidierung.
-- **Test-R²/RMSE** bzw. **Accuracy/Precision/Recall und 2×2-Konfusionsmatrix**.
-- Einfache Imputation und begrenzter MICE-Pfad mit mehreren Imputationen.
-- Druckbarer HTML-Bericht, CSV-Testvorhersagen, JSON-Konfiguration und gespeicherte Läufe.
-- FastAPI, SQLAlchemy/PostgreSQL, Alembic-Migration und eine schlichte Streamlit-Oberfläche.
+**Projektstatus:** funktionsfähiger Portfolio-Prototyp mit synthetischen Beispielen und automatisierten Tests. Die Eignung für einen realen Prozess muss anhand seiner Daten und fachlichen Anforderungen geprüft werden. Die Oberfläche ist deutsch, der Quellcode englisch benannt.
 
-Keine eigenständige Anomalieerkennung, Mixed Models, umfangreiche BI-Oberfläche oder automatische Produktionssteuerung. Die Unterstützungsmatrix steht in [docs/methods.md](docs/methods.md).
+## Welche QM-Frage beantwortet die Anwendung?
 
-## Lokal starten (Python 3.12)
+Eine Produktionslinie prüft das Gewicht abgefüllter Packungen. Die Messwerte schwanken. Für die Auswertung sind zwei Fragen interessant:
+
+| Frage | Analyse | Ergebnis |
+|---|---|---|
+| Wie hängt die Gewichtsabweichung mit Temperatur, Geschwindigkeit oder Maschinentyp zusammen? | Lineare Regression auf Istwert minus Sollwert | Vorhergesagte Abweichung, Test-R²/RMSE, Koeffizienten und bedingte Einflusskurven |
+| Unter welchen Bedingungen treten Toleranzverletzungen häufiger auf? | Logistische Regression auf einen binären Fehlerstatus | Verletzungswahrscheinlichkeiten, Precision, Recall und Konfusionsmatrix |
+
+Targets und Features sind frei wählbar. Derselbe Ablauf lässt sich beispielsweise auf Maßabweichungen oder technische Prüfergebnisse übertragen, sofern Datenstruktur und Modellannahmen passen. Für das Beispiel wird eine CSV mit einer Zeile je Messung vorausgesetzt. Prozessmerkmale müssen vor der vorherzusagenden Qualitätsentscheidung bekannt sein.
+
+**Fachliche Grenzen und Modellschwelle haben verschiedene Aufgaben:** Toleranzgrenzen bestimmen den tatsächlichen Fehlerstatus. Die Wahrscheinlichkeitsschwelle bestimmt, ab welchem vorhergesagten Risiko das Modell eine Verletzung meldet. Eine Änderung der Toleranzgrenzen erfordert eine neue Targetbildung und Analyse.
+
+## Vom Import zum nachvollziehbaren Bericht
+
+| Arbeitsbereich | Was der Nutzer dort erledigt |
+|---|---|
+| **Analyse vorbereiten** | CSV importieren, Datenqualität prüfen, Target und Features zuordnen, Testdesign und Aufbereitung festlegen, Fallzahlen vor dem Start prüfen |
+| **Ergebnis und Bericht** | Modelle auf denselben Testfällen vergleichen, Vorhersagen und Fehlentscheidungen untersuchen, Koeffizienten interpretieren, HTML/CSV/JSON exportieren |
+| **Gespeicherte Daten** | Datensätze mit Importdatum und Laufanzahl durchsuchen, Ergebnisse wieder öffnen, einzelne Läufe oder einen Datensatz samt zugehöriger Läufe nach Bestätigung löschen |
+
+Beim Seitenwechsel bleiben die Eingaben erhalten. Veränderte Einstellungen kennzeichnen ein bisheriges Ergebnis als zu einem älteren Entwurf gehörig. Das Wiederöffnen eines Laufs stellt Datensatz und Konfiguration wieder her. Eine Datensatzlöschung entfernt zugehörige Läufe und interne Modelle in einer Transaktion. Hat sich die angezeigte Laufanzahl zwischenzeitlich geändert, verlangt die API eine erneute Bestätigung.
+
+## Ergebnisse sichtbar machen
+
+Die folgenden Abbildungen visualisieren **tatsächlich berechnete Backend-Ergebnisse** für [synthetische QM-Daten](examples/synthetic_qm.csv) mit den enthaltenen [linearen](examples/linear-config.json) und [logistischen](examples/logistic-config.json) Beispielkonfigurationen. Gezeigt wird jeweils das unregularisierte Referenzmodell mit 480 Trainings- und 120 Testfällen bei zufälliger Aufteilung, Seed 42. Es sind exportierte Ergebnisgrafiken, keine Screenshots der Oberfläche.
+
+![Lineare Regression: beobachtete und vorhergesagte Abweichung sowie Residuen auf Testdaten](docs/assets/linear-test-results.svg)
+
+Die Oberfläche ergänzt diese Sicht um einen Modellvergleich mit Elastic Net, Koeffiziententabellen, optionale Zeitplots und ein optionales Einflussdiagramm pro Lauf. Bei Interaktionen kann dieses Diagramm beispielsweise den Temperaturzusammenhang für niedrige, mittlere und hohe Geschwindigkeit zeigen.
+
+![Logistische Regression: Konfusionsmatrix mit TN, FP, FN und TP sowie Verletzungswahrscheinlichkeiten nach tatsächlicher Klasse](docs/assets/logistic-test-results.svg)
+
+Für QM ist neben der Gesamtgenauigkeit entscheidend, wie viele Verletzungen übersehen werden und wie viele Fehlalarme entstehen. Deshalb werden **Accuracy, Precision, Recall und die Konfusionsmatrix** gemeinsam berichtet. Eine einfache Referenzvorhersage aus den Trainingsdaten hilft bei der Einordnung. Die Abbildungen demonstrieren die Auswertung synthetischer Daten und belegen keine Güte für einen realen Betrieb.
+
+## Methodik mit bewusst begrenztem Umfang
+
+### Die Testaufteilung folgt der späteren Fragestellung
+
+| Testdesign | Trennung | Aussage der Testbewertung |
+|---|---|---|
+| **Unabhängiger Querschnitt** | Zufällige Messungen; bei binärem Target nach Klasse geschichtet | Neue Fälle bei fachlich vertretbarer Unabhängigkeit |
+| **Neue Einheiten** | Ganze Maschinen/Einheiten bleiben im Test | Übertragbarkeit auf bisher nicht im Training enthaltene Einheiten |
+| **Zukünftige Zeiträume** | Frühere Zeitpunkte trainieren, spätere testen | Vorhersagen für einen späteren Zeitraum |
+
+Eine Einheit-ID und Zeitspalte ermöglichen einen Strukturvorschlag, ersetzen aber keine fachliche Bestätigung. Die App erkennt wiederholte Messungen, schaltet dadurch jedoch kein Mixed Model ein. Gleichzeitige Gruppen- und Zeittrennung wird nicht automatisch angeboten.
+
+### Aufbereitung und Modellierung
+
+- **Trainingslokale Pipeline:** Imputation, Zentrierung, Kodierung, Skalierung und gegebenenfalls PCA werden im jeweiligen Trainingsfold gelernt. Die Testdaten bestimmen diese Bezugswerte nicht mit.
+- **Direkte Features:** numerische Größen, Kategorien mit Referenzkodierung, ausgewählte paarweise Interaktionen sowie zentrierter Zeitcounter und Zeitquadrat. Zeitstempel werden in Tagen verarbeitet, numerische Counter behalten ihre Eingabeeinheit, beispielsweise Stunden.
+- **Regression:** lineares oder logistisches Referenzmodell, optionaler Elastic-Net-Vergleich. Dessen Parameter werden über Kreuzvalidierung ausschließlich innerhalb des Trainingsbereichs gesucht. Kein automatisches Auswählen des Gewinners anhand der Testgüte.
+- **Fehlwerte:** vollständige Fälle, Median für numerische Features mit expliziter fehlender Kategorie oder ein begrenztes MICE-Vorhersageensemble aus mehreren Imputationen. Kategoriale Werte werden nicht per MICE imputiert. Fehlende Targets und Zeitangaben werden nicht aufgefüllt.
+- **PCA:** optionale Hauptkomponenten aus den ausgewählten numerischen Features, nach Trainingsimputation und Standardisierung. Kategorien bleiben separat. Die Komponentenanzahl wird vorab festgelegt. Keine Kombination mit MICE, Interaktionen oder erzeugten Zeitpolynomen.
+- **Nachvollziehbare Interpretation:** standardisierte Koeffizienten und Koeffizienten in Designeinheiten, Kategorienreferenzen, logistische Odds Ratios, Trainingsbezugswerte und PCA-Varianz/Komponentengewichte. Koeffizienten sind keine allgemeine Feature-Importance und belegen keine Kausalität.
+- **Begrenzte Inferenz:** geeignete unregularisierte lineare Modelle können Trainingsinferenz liefern; mit Einheit-ID erst ab 20 Trainingsgruppen geclustert. Ein separater gepoolter MICE-Inferenzpfad ist für additive numerische lineare Querschnittsmodelle verfügbar. Keine pauschale Inferenz für alle Modellpfade.
+
+Die vollständige [Methoden- und Unterstützungsmatrix](docs/methods.md) beschreibt gesperrte Kombinationen, Inferenz, unbekannte Testkategorien und weitere Grenzen. Regularisierung, PCA oder Imputation garantieren keine bessere Modellgüte. Wahrscheinlichkeiten sind nicht automatisch kalibriert; zeitliche Extrapolation und quadratische Trends erfordern besondere Vorsicht.
+
+## Technischer Aufbau
+
+```mermaid
+flowchart TD
+    UI["Streamlit · drei Arbeitsbereiche"] --> API["FastAPI · Validierung und Zugriffsschutz"]
+    API --> PIPE["Analyse-Pipeline · scikit-learn / statsmodels"]
+    API --> DB[("PostgreSQL · Datensätze und Analyseläufe")]
+    PIPE --> API
+    API --> REPORT["HTML-Bericht · CSV · JSON-Konfiguration"]
+```
+
+| Baustein | Umsetzung |
+|---|---|
+| Datenimport und Schnittstelle | UTF-8-CSV mit Komma, Semikolon oder Tab; frei zuordenbare Spalten; FastAPI mit OpenAPI unter `/docs` |
+| Backend-Logik | Validierte Konfiguration, Targetbildung, Datenaufteilung, Modellvergleich, Ergebnisaufbereitung und Export |
+| Datenhaltung | SQLAlchemy und Alembic; PostgreSQL im Hosting, SQLite für den lokalen Einstieg |
+| Gespeicherte Ergebnisse | Datenstand, Konfiguration, Testvorhersagen, Koeffizienten, Versionsinformationen und interne Modellartefakte |
+| Datenintegrität | SHA-256 verhindert erneute Speicherung byteidentischer Uploads; unveränderte Läufe bleiben bis zur ausdrücklichen Löschung wieder aufrufbar |
+| Bereitstellung | Docker Compose lokal; Railway mit API-Dienst, UI-Dienst und PostgreSQL |
+
+Die Datenbank ist ein kleines Analysedatenlager mit zwei verknüpften Tabellen. Sie ersetzt kein normalisiertes Produktionsdatenmodell. CSV-Dateien aus vorhandenen Prüf- oder Produktionssystemen sind ein möglicher Eingang, sofern ihr Schema geeignet ist; eine direkte Geräte-, ERP- oder Cloud-Anbindung ist nicht implementiert. Details: [Architektur und Entscheidungen](docs/design.md).
+
+## In fünf Minuten ausprobieren
+
+1. Zugangsschlüssel eingeben und **Synthetisches QM-Beispiel laden**.
+2. **Qualitätsabweichung erklären**, Target **Vorhandene Spalte → `deviation`**, numerische Features `temperature`, `throughput`, `operating_hours`, Kategorie `machine_type`. **Mit Elastic Net vergleichen** aktiviert lassen und Analyse starten.
+3. **Test-R²/RMSE**, einfache Referenzvorhersage, Streudiagramm und Residuen vergleichen. Unter **Einflussgrößen** und **Modelldetails** die Koeffizienten und Aufbereitung prüfen.
+4. Über **Konfiguration bearbeiten** zurückgehen. **Toleranzverletzung vorhersagen**, Target **Vorhandene Spalte → `violation`**, positive Klasse `1`. Analyse starten und **Precision, Recall, Fehlalarme und übersehene Verletzungen** prüfen.
+5. HTML-Bericht und Testvorhersagen herunterladen. Unter **Gespeicherte Daten** den Lauf auswählen und wieder öffnen. Löschungen nur für nicht mehr benötigte Daten bestätigen.
+
+**Weitere Beispiele:** Für Zeittrends `timestamp` zuordnen, Zeitcounter/Quadrat aktivieren und **Zukünftige Zeiträume** wählen; siehe [Zeit-/Interaktionskonfiguration](examples/time-interaction-config.json). Für PCA **Korrelierte Sensoren (PCA)** laden und zwei Komponenten wählen. Für MICE [synthetic_cross_section.csv](examples/synthetic_cross_section.csv) mit `deviation`, `temperature` und `throughput` verwenden; keine Einheit-ID oder Interaktionen zuordnen. Sämtliche Beispiele sind synthetisch.
+
+## Lokal starten · Python 3.12
 
 ```bash
 python3.12 -m venv .venv
@@ -37,86 +111,41 @@ alembic upgrade head
 uvicorn qmworkbench.api:app --host 127.0.0.1 --port 8000
 ```
 
-In einem zweiten Terminal, im selben Verzeichnis und mit aktivierter Umgebung:
+In einem zweiten Terminal im selben Verzeichnis, mit aktivierter Umgebung:
 
 ```bash
 streamlit run app.py
 ```
 
-`http://localhost:8501` öffnen und den Wert von `WORKBENCH_API_KEY` in der Seitenleiste eingeben. Die UI gibt diesen Schlüssel nicht aus und besitzt keinen eingebauten Standardschlüssel. SQLite dient dem lokalen Einstieg; für persistentes Hosting PostgreSQL verwenden.
+`http://localhost:8501` öffnen und den Wert von `WORKBENCH_API_KEY` aus dem ersten Terminal in der Seitenleiste eingeben. Die UI zeigt den Schlüssel nicht an; es gibt keinen eingebauten Standardschlüssel. Für eine API außerhalb von `http://127.0.0.1:8000` im UI-Prozess `API_BASE_URL` setzen. Unter Windows die Aktivierung und Umgebungsvariablen an die verwendete Shell anpassen.
 
-Alternativ mit Docker Compose: `.env.example` nach `.env` kopieren, **beide Passwörter ersetzen**, dann `docker compose up --build`. Die UI läuft auf Port 8501, die API auf 8000. Das Datenbankpasswort muss für die verwendete Verbindungs-URL URL-sicher sein.
+**Docker Compose:** `.env.example` nach `.env` kopieren, beide Passwörter ersetzen, dann `docker compose up --build`. UI auf Port 8501, API auf 8000. Das Datenbankpasswort muss für die Verbindungs-URL URL-sicher sein. Persistentes Hosting und private API-Verbindung: [Railway-Anleitung](docs/railway.md).
 
-## Fünf-Minuten-Demo
+## API und gespeicherte Daten
 
-1. Zugangsschlüssel eingeben und **Synthetisches QM-Beispiel laden**.
-2. **Qualitätsabweichung erklären** mit Target `deviation`, Features `temperature`, `throughput`, `operating_hours` und Kategorie `machine_type` übernehmen. Analyse starten; die App öffnet die Ergebnisseite.
-3. Test-R²/RMSE und Referenzvorhersage vergleichen; Koeffizienten sind auf standardisierte Designspalten bezogen.
-4. Über **Konfiguration bearbeiten** zurückgehen, **Toleranzverletzung vorhersagen** wählen und `violation` wählen. Accuracy, Precision, Recall und die Konfusionsmatrix prüfen. Positive Klasse ist `1`.
-5. In der Zusammenfassung Targetdefinition und Testdesign prüfen. Eine neue Analyse mit anderer Wahrscheinlichkeitsschwelle starten. Den Einfluss auf Fehlalarme und übersehene Verletzungen erklären; nachträgliches Testdaten-Tuning ist explorativ.
-6. HTML-Bericht und CSV herunterladen. HTML im Browser über „Drucken → PDF“ ausgeben.
-
-Für Zeittrends: `timestamp` auswählen, Zeitcounter/Quadrat aktivieren und **Zukünftige Zeiträume** als Testdesign wählen. Für eine ausgewählte Interaktion unter den erweiterten Einstellungen ein Paar hinzufügen. MICE dabei ausschalten, da dieser Methodenmix in v0.1 gesperrt ist.
-
-Für MICE: `examples/synthetic_cross_section.csv` hochladen, `deviation` als Target, `temperature` und `throughput` als numerische Features wählen. Keine Kategorien, Zeitmerkmale oder Einheiten zuordnen. MICE und optional die getrennte retrospektive Inferenz einschalten.
-
-## Zentrierung, PCA und Regressionsergebnisse
-
-In **Erweiterte Einstellungen → Feature Engineering** zwischen direkten Features und PCA wählen. Bei direkten Features ist Zentrierung in der UI für neue Datensätze vorausgewählt; die API behält aus Kompatibilitätsgründen `center_numeric=false` als Standard. Zeitcounter werden wie bisher um das jeweilige Trainingsmittel zentriert. Alle Bezugswerte werden pro Trainingsfold gelernt und im Ergebnis dokumentiert.
-
-Für PCA das Beispiel **Korrelierte Sensoren (PCA)** wählen und laden: sechs korrelierte numerische Sensoren, Maschinentyp, zwei Targets, Zeit und Maschinen-ID. Im PCA-Modus zunächst zwei Hauptkomponenten wählen. Numerische Features werden imputiert, standardisiert und per PCA transformiert. Kategorien und Fehlwertindikatoren bleiben separat. PCA ist mit linearer/logistischer Regression, Elastic Net sowie Zufalls-, Gruppen- und Zeitsplits nutzbar; Kombinationen mit MICE, Interaktionen und Zeitpolynomen sind vorerst gesperrt. PCA ist keine Faktorenanalyse und garantiert keine bessere Vorhersage.
-
-Koeffizienten werden sowohl pro Standardabweichung der erzeugten Designspalte als auch in deren unskalierten Einheiten gezeigt. Letztere beziehen sich ggf. auf zentrierte Größen oder PC-Scores. Logistische Odds Ratios sind keine Risikoverhältnisse; Intercept-Exponent = Basis-Odds. Bei Interaktionen kann ein numerischer Kurvenvergleich auf Trainingsquantilen 10/50/90 % angefordert werden. Kein Koeffizient oder PCA-Gewicht ist eine allgemeine Feature-Importance. Alte gespeicherte Läufe bleiben ohne neu berechnete Metadaten darstellbar.
-
-## Target und Grenzen
-
-Fachliche Toleranzgrenzen erzeugen den beobachteten Fehlerstatus. Standard: auf der Grenze noch zulässig. Fehlende erforderliche Grenzen erzeugen **unbekannt**, nicht „gut“.
-
-Die logistische Wahrscheinlichkeitsschwelle klassifiziert dagegen das vorhergesagte Risiko. Eine geänderte fachliche Grenze verlangt ein neues Target und neues Training. Jede Analyse speichert ihre Konfiguration unveränderlich.
-
-Eine Messwert-Verletzungsquote ist keine Geräte-Ausschussquote. Istwert, Abweichung oder Fehlerstatus dürfen sich nicht als Features gegenseitig vorwegnehmen. Für echte zukünftige Vorhersagen müssen alle Features zum Entscheidungszeitpunkt verfügbar sein.
-
-## API
-
-`/docs` beschreibt die API. Datenrouten benötigen den Header `X-API-Key`.
+Alle Datenrouten benötigen `X-API-Key`. Listen sind mit `limit` (maximal 200) und `offset` paginiert. Die vollständigen Konfigurationsfelder beschreibt `/docs`; Beispiele stehen unter [examples/](examples/).
 
 | Route | Zweck |
 |---|---|
-| `POST /datasets` | Multipart-Upload im Feld `file` |
-| `POST /datasets/demo` | Reproduzierbare synthetische Daten |
-| `POST /datasets/demo-pca` | Synthetisches Beispiel korrelierter Sensoren |
-| `GET /datasets/{id}` | Vorschau und Datenqualität |
-| `POST /datasets/{id}/preview` | Target-/Fallzahlen und Testaufteilung ohne Modellschätzung oder Speicherung |
-| `POST /datasets/{id}/analyses` | Validierte Analysekonfiguration ausführen |
-| `GET /analyses/{id}` | Gespeichertes Ergebnis |
-| `GET /analyses/{id}/report` | Druckbarer HTML-Bericht |
+| `POST /datasets` | CSV als Multipart-Upload im Feld `file` |
+| `POST /datasets/demo` | Synthetisches QM-Beispiel laden |
+| `POST /datasets/demo-pca` | Synthetisches Sensorbeispiel laden |
+| `GET /datasets` | Datensätze mit Importdatum, Umfang und Laufanzahl auflisten |
+| `GET /datasets/{id}` | Datenprofil und Vorschau lesen |
+| `POST /datasets/{id}/preview` | Target-/Fallzahlen und Testaufteilung vor der Schätzung prüfen |
+| `POST /datasets/{id}/analyses` | Konfigurierte Analyse ausführen und speichern |
+| `GET /datasets/{id}/analyses` | Laufübersicht mit Datum, Analyseart und Target |
+| `GET /analyses/{id}` | Gespeichertes Ergebnis lesen |
+| `GET /analyses/{id}/report` | Druckbarer HTML-Bericht, im Browser auch als PDF speicherbar |
 | `GET /analyses/{id}/csv?model=reference` | Testvorhersagen; alternativ `elastic_net` |
-| `GET /analyses/{id}/config` | Reproduzierbare Konfiguration |
-| `GET /health` | Datenbankverbindung und Anwendungsversion |
+| `GET /analyses/{id}/config` | Gespeicherte JSON-Konfiguration |
+| `DELETE /analyses/{id}` | Einzelnen Lauf löschen; Datensatz bleibt bestehen |
+| `DELETE /datasets/{id}?expected_runs=N` | Datensatz und zugehörige Läufe löschen; bei abweichender Laufanzahl HTTP 409 |
+| `GET /health` | Datenbankverbindung und Anwendungsversion prüfen |
 
-Beispielkonfiguration:
+Alle Nutzer mit demselben Zugangsschlüssel teilen den Datenbestand und dessen Löschrechte. Es gibt keine getrennten Benutzerkonten oder einen Papierkorb. Die App lädt keine fremden Modellartefakte und bietet aktuell keine separate Predict-API für neue Daten.
 
-```json
-{
-  "task": "logistic",
-  "target_mode": "limits",
-  "target": "deviation",
-  "lower": -2,
-  "upper": 2,
-  "numeric": ["temperature", "throughput"],
-  "categorical": ["machine_type"],
-  "compare_elastic": true,
-  "threshold": 0.5,
-  "split": "random",
-  "seed": 42
-}
-```
-
-## Railway
-
-Siehe [docs/railway.md](docs/railway.md): ein Repository, zwei Dienste (`SERVICE=api` / `SERVICE=ui`) und PostgreSQL. `start.sh` berücksichtigt Railways `PORT`. Es enthält die Migration vor dem API-Start. `railway.toml` setzt bewusst keinen gemeinsamen Healthcheck, da UI und API unterschiedliche Pfade nutzen.
-
-## Tests
+## Qualitätssicherung
 
 ```bash
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 pytest -q
@@ -124,16 +153,26 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m scripts.ui_
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m scripts.user_scenarios
 ```
 
-Tests prüfen unter anderem Targetgrenzen, unbekannte Targets, Kennzahlen gegen handrechenbare Fälle, Gruppentrennung, zeitliche Fold-Grenzen, Trainingsimputation, Interaktionen, Zeitquadrat, MICE-Reproduzierbarkeit, API-Zugriffsschutz und Export. GitHub Actions enthält zusätzlich einen PostgreSQL-Migrations-/Persistenztest. Ein erfolgreicher lokaler SQLite-Test ist kein Nachweis eines bereits ausgeführten PostgreSQL- oder Railway-Deployments.
+| Prüfbereich | Abgedeckte Aspekte |
+|---|---|
+| Fachliche Berechnungen | Targetgrenzen, unbekannte Targets, Kennzahlen, Zentrierung, Interaktionen, Zeitquadrat, PCA und begrenzter MICE-Pfad |
+| Testdesign | Getrennte Gruppen, zeitliche Fold-Grenzen und trainingslokale Aufbereitung |
+| API und Persistenz | Zugriffsschutz, gespeicherte Ergebnisse, Exporte, paginierte Übersichten und referenzierte Datensätze |
+| Löschabläufe | Gezielte Löschung, veränderte Laufanzahl, Transaktionsrollback und erneuter Import |
+| Oberfläche mit echter HTTP-API | Seitenwechsel, Wiederöffnen, Konfigurationswiederherstellung, gesperrte Eingaben, Löschbestätigung und Aufräumen des Sitzungszustands |
+| Fachliche Anwendungsszenarien | Acht Szenarien einschließlich linearer/logistischer Regression, Gruppen-/Zeitaufteilung, PCA und Interaktionen |
+| GitHub Actions | Code- und Oberflächentests sowie PostgreSQL-Migration und Persistenz-/Löschprüfung |
 
-## Betrieb und Grenzen
+Die Ergebnisabbildungen zeigen zwei dieser Analysepfade. Automatisierte Tests ersetzen keine betriebliche Abnahme; deren Kriterien sind im [Architekturdokument](docs/design.md#fachliche-abnahme) beschrieben.
 
-- 5 MiB / 10.000 Zeilen / 80 CSV-Spalten; höchstens 25 numerische und 8 kategoriale Features, 20 Kategorien je Feature, 12 Interaktionen und 150 Designspalten.
-- Mindestens 50 auswertbare Fälle; weitere Anforderungen an Klassen/Folds werden geprüft. Diese Untergrenzen garantieren keine statistische Belastbarkeit.
-- Ein API-Prozess, eine Analyse gleichzeitig; weitere gleichzeitige Analysen erhalten HTTP 429. Kein Queue-System und keine harte Prozess-Zeitbegrenzung; der UI-Client wartet maximal 300 Sekunden. Ein Clientabbruch stoppt eine laufende Schätzung nicht automatisch.
-- Ein gemeinsamer Arbeitsbereich mit einem Zugriffsschlüssel; keine nutzerbezogene Mandantentrennung, keine SSO-Anbindung. Nicht als öffentlicher Uploaddienst für vertrauliche Daten betreiben.
-- Daten und interne Modellartefakte liegen in der konfigurierten Datenbank. Niemals fremde Pickle-/Joblib-Dateien importieren. CSV-Export schützt Textzellen gegen Formelausführung; HTML maskiert Nutzertexte.
-- Paketversionen sind gesperrt. Vor produktivem Einsatz aktuelle Sicherheitsupdates und die Zulässigkeit der vorgesehenen Datenverarbeitung prüfen.
-- Synthetische Modellgüte ist kein Qualitätsnachweis für einen realen Betrieb. Für den Produktiveinsatz sind fachliche Validierung, Berechtigungen, Backup und ein Betriebsverantwortlicher nötig.
+## Betriebsgrenzen und nächste fachliche Prüfung
 
-Architektur und Entscheidungen: [docs/design.md](docs/design.md). Das Repository enthält keine vertraulichen Bewerbungsmaterialien oder realen Unternehmensdaten.
+- **Umfang:** maximal 5 MiB, 10.000 Zeilen und 80 CSV-Spalten; bis zu 25 numerische und 8 kategoriale Features, 20 Kategorien je Feature, 12 Interaktionen und 150 erzeugte Designspalten.
+- **Datenbasis:** mindestens 50 auswertbare Fälle; zusätzliche Klassen-, Gruppen- und Foldprüfungen. Diese Untergrenzen garantieren keine statistische Belastbarkeit.
+- **Ausführung:** ein API-Prozess, eine Analyse gleichzeitig; keine Hintergrundwarteschlange. Der UI-Client wartet maximal 300 Sekunden. Ein Clientabbruch beendet die Schätzung nicht automatisch. Kein abschließendes Training auf allen Daten nach der Testbewertung.
+- **Interpretation:** keine automatischen Kausalitätsnachweise, keine eigenständige Anomalieerkennung, keine Mixed Models und keine allgemeine Permutations-Feature-Importance. Koeffizienten, Interaktionen und PCA-Gewichte müssen in ihrem jeweiligen Modellkontext gelesen werden.
+- **Betrieb:** gemeinsamer Zugriffsschlüssel, keine Mandantentrennung oder SSO. Für Vorführungen synthetische oder ausdrücklich freigegebene Daten verwenden. Vor einem realen Einsatz Berechtigungen, Backup, Sicherheitsupdates und zulässige Datenverarbeitung klären.
+
+Ein sinnvoller nächster Schritt ist ein abgegrenzter betrieblicher Datensatz mit klarer Qualitätsfrage: Zielgröße und Entscheidungszeitpunkt definieren, Datenherkunft und Einheiten prüfen, passendes Testdesign wählen und die Ergebnisse fachlich bewerten. Bereits vorhandene Funktionen sind Vorleistungen; ein späterer IHK-Projektauftrag muss eigenständig und noch offen abgegrenzt werden.
+
+Das Repository enthält keine realen Unternehmensdaten oder vertraulichen Bewerbungsmaterialien.
