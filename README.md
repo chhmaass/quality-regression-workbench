@@ -89,6 +89,77 @@ flowchart TD
 
 Die Datenbank ist ein kleines Analysedatenlager mit zwei verknüpften Tabellen. Sie ersetzt kein normalisiertes Produktionsdatenmodell. CSV-Dateien aus vorhandenen Prüf- oder Produktionssystemen sind ein möglicher Eingang, sofern ihr Schema geeignet ist; eine direkte Geräte-, ERP- oder Cloud-Anbindung ist nicht implementiert. Details: [Architektur und Entscheidungen](docs/design.md).
 
+## Projektstruktur
+
+```text
+quality-regression-workbench/
+├── .github/
+│   └── workflows/
+│       └── tests.yml                   # CI mit PostgreSQL, API- und Oberflächentests
+├── qmworkbench/
+│   ├── __init__.py                     # Anwendungsversion
+│   ├── api.py                         # HTTP-API, Zugriffsschutz und Transaktionen
+│   ├── schemas.py                     # Konfiguration und Methodenvalidierung
+│   ├── data.py                        # CSV-Import, Targets und Datenprofile
+│   ├── features.py                    # Imputation, Zentrierung, Kodierung und PCA
+│   ├── analysis.py                    # Testaufteilung, Regression und Kennzahlen
+│   ├── storage.py                     # SQLAlchemy-Datenmodell und DB-Verbindung
+│   ├── prepare_ui.py                  # Arbeitsbereich Analyse vorbereiten
+│   ├── results_ui.py                  # Arbeitsbereich Ergebnis und Bericht
+│   ├── saved_ui.py                    # Arbeitsbereich Gespeicherte Daten
+│   ├── ui.py                          # Gemeinsamer Sitzungszustand und API-Client
+│   ├── result_plots.py                # Vorhersage-, Koeffizienten- und PCA-Grafiken
+│   └── report.py                      # HTML-Bericht und sichere CSV-Ausgabe
+├── views/
+│   ├── prepare.py                     # Seiteneinstieg Vorbereitung
+│   ├── results.py                     # Seiteneinstieg Ergebnisse
+│   └── saved.py                       # Seiteneinstieg Datenverwaltung
+├── migrations/
+│   ├── env.py                         # Alembic-Konfiguration
+│   └── versions/
+│       └── 0001_initial.py            # Tabellen datasets und analysis_runs
+├── examples/
+│   ├── synthetic_qm.csv               # Synthetische Mess- und Prozessdaten
+│   ├── synthetic_cross_section.csv    # Synthetisches Querschnittsbeispiel
+│   ├── linear-config.json
+│   ├── logistic-config.json
+│   ├── mice-config.json
+│   └── time-interaction-config.json
+├── tests/
+│   ├── test_core.py                   # Fachliche Berechnungen und Validierung
+│   ├── test_api.py                    # API, Persistenz, Exporte und Löschtransaktionen
+│   ├── test_pca_centering.py           # PCA, Zentrierung und Ergebnisinterpretation
+│   └── test_ui_access.py              # Zugangsschlüssel und sichere Fehlermeldungen
+├── scripts/
+│   ├── ui_smoke.py                    # Navigation und Analyseabläufe mit echter API
+│   ├── saved_data_scenarios.py        # Verwaltungs- und Löschabläufe im UI-Test
+│   ├── user_scenarios.py              # Acht fachliche Anwendungsszenarien
+│   └── postgres_smoke.py              # PostgreSQL-Persistenz und Löschprüfung
+├── docs/
+│   ├── design.md                      # Architektur, Entscheidungen und Abnahmekriterien
+│   ├── methods.md                     # Methoden, Annahmen und Unterstützungsmatrix
+│   ├── validation.md                  # Validierungsszenarien
+│   ├── railway.md                     # Bereitstellung und Betriebsprüfung
+│   └── assets/
+│       ├── linear-test-results.svg
+│       └── logistic-test-results.svg
+├── app.py                             # Streamlit-Einstieg und Seitennavigation
+├── Dockerfile
+├── compose.yaml                       # Lokaler Betrieb mit UI, API und PostgreSQL
+├── start.sh                           # Dienststart und Datenbankmigration
+├── railway.toml
+├── alembic.ini
+├── pyproject.toml
+├── requirements.txt
+├── requirements.lock                  # Festgelegte Paketversionen
+├── .env.example                       # Beispielkonfiguration ohne echte Zugangsdaten
+├── .dockerignore
+├── .gitignore
+└── README.md
+```
+
+Die drei Seiteneinstiege unter `views/` rufen die jeweiligen UI-Module auf. Die Oberfläche kommuniziert über `ui.py` mit der API; Analysepipeline und Datenhaltung liegen im selben Python-Paket, werden im Hosting aber vom separaten API-Dienst ausgeführt.
+
 ## In fünf Minuten ausprobieren
 
 1. Zugangsschlüssel eingeben und **Synthetisches QM-Beispiel laden**.
