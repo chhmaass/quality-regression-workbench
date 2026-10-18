@@ -98,6 +98,27 @@ def restore_config(c):
     st.session_state.last_mode = values["mode_label"]
 
 
+def open_saved_run(run_id):
+    run = request("GET", f"/analyses/{run_id}").json()
+    ds = request("GET", f"/datasets/{run['dataset_id']}").json()
+    use_dataset(ds, run["result"]["config"])
+    st.session_state.run = run
+    st.session_state.draft = {"digest": ds["digest"], "config": run["result"]["config"]}
+
+
+def forget_deleted(dataset_id=None, run_id=None):
+    """Remove cached results and preparation only when they refer to deleted data."""
+    run = st.session_state.get("run", {})
+    if (run_id and run.get("id") == run_id) or (dataset_id and run.get("dataset_id") == dataset_id):
+        st.session_state.pop("run", None)
+    if dataset_id and st.session_state.get("dataset", {}).get("id") == dataset_id:
+        for key in list(st.session_state):
+            if key.startswith("cfg_") or key in {"dataset", "draft", "preview_cache", "last_task", "last_mode"}:
+                del st.session_state[key]
+    if dataset_id or run_id == st.session_state.get("open_run_id"):
+        st.session_state.pop("open_run_id", None)
+
+
 def fingerprint(dataset_id, config):
     return json.dumps([dataset_id, config], sort_keys=True)
 

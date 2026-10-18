@@ -48,6 +48,80 @@ def test_no_secret_no_unprotected_access(client, monkeypatch):
     assert client.post("/datasets/demo").status_code == 503
 
 
+def saved_run(client, dataset_id, task="linear"):
+    response = client.post(f"/datasets/{dataset_id}/analyses", json={"task": task,
+        "target": "deviation" if task == "linear" else "violation", "numeric": ["throughput"], "compare_elastic": False})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_saved_data_listing_scoped_deletion_and_reimport(client):
+    client.headers["X-API-Key"] = "test-secret"
+    ds = client.post("/datasets/demo").json()
+    other = client.post("/datasets/demo-pca").json()
+    linear = saved_run(client, ds["id"])
+    logistic = saved_run(client, ds["id"], "logistic")
+    listing = client.get("/datasets").json()
+    assert listing["total"] == 2
+    assert next(x for x in listing["items"] if x["id"] == ds["id"])["run_count"] == 2
+    assert all("data" not in x and "profile" not in x for x in listing["items"])
+    runs = client.get(f"/datasets/{ds['id']}/analyses").json()
+    assert runs["total"] == 2
+    assert {x["task"] for x in runs["items"]} == {"linear", "logistic"}
+    assert {x["target"] for x in runs["items"]} == {"deviation", "violation"}
+    assert all("artifact" not in x and "result" not in x for x in runs["items"])
+    assert len(client.get("/datasets?limit=1").json()["items"]) == 1
+    assert len(client.get(f"/datasets/{ds['id']}/analyses?limit=1&offset=1").json()["items"]) == 1
+    assert client.get("/datasets?offset=-1").status_code == 422
+    assert client.delete(f"/analyses/{linear['id']}").status_code == 200
+    assert client.get(f"/analyses/{linear['id']}").status_code == 404
+    assert client.delete(f"/analyses/{linear['id']}").status_code == 404
+    assert client.get(f"/analyses/{logistic['id']}/report").status_code == 200
+    assert client.get(f"/datasets/{ds['id']}").status_code == 200
+    assert client.delete(f"/datasets/{ds['id']}").status_code == 422
+    assert client.delete(f"/datasets/{ds['id']}?expected_runs=0").status_code == 409
+    assert client.get(f"/analyses/{logistic['id']}").status_code == 200
+    assert client.delete(f"/datasets/{ds['id']}?expected_runs=1").json()["deleted_runs"] == 1
+    assert client.get(f"/datasets/{ds['id']}").status_code == 404
+    assert client.get(f"/analyses/{logistic['id']}/report").status_code == 404
+    assert client.get(f"/datasets/{other['id']}").status_code == 200
+    assert client.delete(f"/datasets/{other['id']}?expected_runs=0").status_code == 200
+    assert client.get("/datasets").json() == {"total": 0, "items": []}
+    assert client.post("/datasets/demo").json()["id"] != ds["id"]
+
+
+def test_management_auth_not_found_and_busy_analysis(client):
+    for method, url in [("GET", "/datasets"), ("GET", "/datasets/missing/analyses"),
+                        ("DELETE", "/analyses/missing"), ("DELETE", "/datasets/missing?expected_runs=0")]:
+        assert client.request(method, url).status_code == 401
+    client.headers["X-API-Key"] = "test-secret"
+    assert client.get("/datasets/missing/analyses").status_code == 404
+    assert client.delete("/analyses/missing").status_code == 404
+    assert client.delete("/datasets/missing?expected_runs=0").status_code == 404
+    from qmworkbench.api import analysis_lock
+    with analysis_lock:
+        assert client.delete("/analyses/missing").status_code == 409
+        assert client.delete("/datasets/missing?expected_runs=0").status_code == 409
+
+
+def test_failed_dataset_delete_rolls_back_child_deletion(client):
+    from sqlalchemy import event
+    client.headers["X-API-Key"] = "test-secret"
+    ds = client.post("/datasets/demo").json()
+    run = saved_run(client, ds["id"])
+    def fail_parent_delete(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("DELETE FROM DATASETS"):
+            raise RuntimeError("Simulated database failure")
+    event.listen(engine(), "before_cursor_execute", fail_parent_delete)
+    try:
+        with pytest.raises(RuntimeError, match="Simulated"):
+            client.delete(f"/datasets/{ds['id']}?expected_runs=1")
+    finally:
+        event.remove(engine(), "before_cursor_execute", fail_parent_delete)
+    assert client.get(f"/datasets/{ds['id']}").status_code == 200
+    assert client.get(f"/analyses/{run['id']}/report").status_code == 200
+
+
 def test_target_preview_matches_analysis_and_excludes_unknown_values(client):
     import numpy as np
     from qmworkbench.data import demo_data

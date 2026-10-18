@@ -9,6 +9,7 @@ for key in list(st.session_state):
 page = st.navigation([
     st.Page("views/prepare.py", title="Analyse vorbereiten", icon="🛠️", default=True),
     st.Page("views/results.py", title="Ergebnis und Bericht", icon="📊", url_path="results"),
+    st.Page("views/saved.py", title="Gespeicherte Daten", icon="🗂️", url_path="saved"),
 ])
 with st.sidebar:
     st.title("QM-Regressionswerkstatt")

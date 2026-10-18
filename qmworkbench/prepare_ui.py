@@ -5,7 +5,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from .schemas import AnalysisConfig
-from .ui import (TASKS, METHODS, SPLITS, control as w, request, use_dataset,
+from .ui import (TASKS, METHODS, SPLITS, control as w, request, use_dataset, open_saved_run,
                  preview, describe_config, draft_changed)
 
 
@@ -37,11 +37,7 @@ def render():
                 st.error("Bitte eine Lauf-ID eingeben.")
             else:
                 try:
-                    run = request("GET", f"/analyses/{run_id.strip()}").json()
-                    ds = request("GET", f"/datasets/{run['dataset_id']}").json()
-                    use_dataset(ds, run["result"]["config"])
-                    st.session_state.run = run
-                    st.session_state.draft = {"digest": ds["digest"], "config": run["result"]["config"]}
+                    open_saved_run(run_id.strip())
                     st.switch_page("views/results.py")
                 except (httpx.HTTPError, ValueError) as exc:
                     st.error(str(exc))

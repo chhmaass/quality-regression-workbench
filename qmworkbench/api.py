@@ -9,9 +9,9 @@ from datetime import timezone
 
 import numpy as np
 import pandas as pd
-from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from . import __version__
@@ -56,8 +56,8 @@ def health():
     return {"status": "ok", "version": __version__}
 
 
-def read_dataset(session, dataset_id):
-    obj = session.get(Dataset, dataset_id)
+def read_dataset(session, dataset_id, lock=False):
+    obj = session.scalar(select(Dataset).where(Dataset.id == dataset_id).with_for_update()) if lock else session.get(Dataset, dataset_id)
     if not obj:
         raise HTTPException(404, "Datensatz nicht gefunden.")
     return obj
@@ -110,6 +110,67 @@ def dataset(dataset_id: str):
         return {"id": obj.id, "name": obj.name, "digest": obj.digest, "profile": obj.profile}
 
 
+@app.get("/datasets", dependencies=[Depends(authenticate)])
+def list_datasets(limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    with session_factory()() as session:
+        counts = select(AnalysisRun.dataset_id, func.count().label("runs")).group_by(AnalysisRun.dataset_id).subquery()
+        rows = session.execute(select(Dataset.id, Dataset.name, Dataset.created_at, Dataset.profile,
+            func.coalesce(counts.c.runs, 0)).outerjoin(counts, counts.c.dataset_id == Dataset.id)
+            .order_by(Dataset.created_at.desc(), Dataset.id).offset(offset).limit(limit)).all()
+        return {"total": session.scalar(select(func.count()).select_from(Dataset)), "items": [
+            {"id": id_, "name": name, "created_at": iso_utc(created), "rows": profile["rows"],
+             "columns": len(profile["columns"]), "run_count": count} for id_, name, created, profile, count in rows]}
+
+
+@app.get("/datasets/{dataset_id}/analyses", dependencies=[Depends(authenticate)])
+def list_runs(dataset_id: str, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    with session_factory()() as session:
+        read_dataset(session, dataset_id)
+        rows = session.execute(select(AnalysisRun.id, AnalysisRun.created_at,
+            AnalysisRun.result["config"]["task"].as_string(), AnalysisRun.result["config"]["target"].as_string())
+            .where(AnalysisRun.dataset_id == dataset_id).order_by(AnalysisRun.created_at.desc(), AnalysisRun.id)
+            .offset(offset).limit(limit)).all()
+        total = session.scalar(select(func.count()).select_from(AnalysisRun).where(AnalysisRun.dataset_id == dataset_id))
+        return {"total": total, "items": [{"id": id_, "created_at": iso_utc(created), "task": task, "target": target}
+            for id_, created, task, target in rows]}
+
+
+@app.delete("/analyses/{run_id}", dependencies=[Depends(authenticate)])
+def delete_run(run_id: str):
+    if not analysis_lock.acquire(blocking=False):
+        raise HTTPException(409, "Eine Analyse oder Löschung läuft bereits. Bitte später erneut versuchen.")
+    try:
+        with session_factory()() as session:
+            run = fetch_run(session, run_id)
+            # The same parent-row lock is used by training and dataset deletion.
+            read_dataset(session, run.dataset_id, lock=True)
+            removed = session.execute(delete(AnalysisRun).where(AnalysisRun.id == run_id)).rowcount
+            if not removed:
+                raise HTTPException(404, "Analyselauf nicht gefunden.")
+            session.commit()
+            return {"deleted_run_id": run_id}
+    finally:
+        analysis_lock.release()
+
+
+@app.delete("/datasets/{dataset_id}", dependencies=[Depends(authenticate)])
+def delete_dataset(dataset_id: str, expected_runs: int = Query(..., ge=0)):
+    if not analysis_lock.acquire(blocking=False):
+        raise HTTPException(409, "Eine Analyse oder Löschung läuft bereits. Bitte später erneut versuchen.")
+    try:
+        with session_factory()() as session:
+            obj = read_dataset(session, dataset_id, lock=True)
+            count = session.scalar(select(func.count()).select_from(AnalysisRun).where(AnalysisRun.dataset_id == dataset_id))
+            if count != expected_runs:
+                raise HTTPException(409, "Die Anzahl der Analyseläufe hat sich geändert. Übersicht aktualisieren und erneut bestätigen.")
+            session.execute(delete(AnalysisRun).where(AnalysisRun.dataset_id == dataset_id))
+            session.delete(obj)
+            session.commit()
+            return {"deleted_dataset_id": dataset_id, "deleted_runs": count}
+    finally:
+        analysis_lock.release()
+
+
 def clean_json(value):
     if isinstance(value, dict):
         return {k: clean_json(v) for k, v in value.items()}
@@ -147,7 +208,7 @@ def run_analysis(dataset_id: str, config: AnalysisConfig):
         raise HTTPException(429, "Eine Analyse läuft bereits. Bitte nach Abschluss erneut versuchen.")
     try:
         with session_factory()() as session:
-            obj = read_dataset(session, dataset_id)
+            obj = read_dataset(session, dataset_id, lock=True)
             frame = pd.read_json(io.StringIO(obj.data), orient="split", convert_dates=False)
             try:
                 result, artifact = analyze(frame, config)

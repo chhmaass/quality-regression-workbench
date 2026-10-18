@@ -84,6 +84,8 @@ def main():
             assert not reopened.exception and not reopened.error
             assert not any("geändert" in w.value for w in reopened.warning)
             print("Navigation, retained settings, stale-results warning, blocked invalid input, saved-run restoration: OK")
+            from scripts.saved_data_scenarios import exercise
+            exercise(reopened, os.environ["API_BASE_URL"])
         finally:
             server.terminate()
             server.wait(timeout=10)

@@ -6,7 +6,8 @@ Eine kleine QM-Regressionswerkstatt: CSV-Daten prüfen, Einflussgrößen untersu
 
 ## Was funktioniert?
 
-- Getrennte Seiten **Analyse vorbereiten** und **Ergebnis und Bericht**; Eingaben bleiben beim Wechsel erhalten.
+- Drei Arbeitsbereiche: **Analyse vorbereiten**, **Ergebnis und Bericht**, **Gespeicherte Daten**; Eingaben bleiben beim Wechsel erhalten.
+- Gespeicherte Datensätze mit Importdatum und Laufanzahl durchsuchen, Läufe öffnen und nach ausdrücklicher Bestätigung löschen. Datensatzlöschung entfernt zugehörige Läufe und Modelle in einer Transaktion. Alle Zugänge mit demselben Schlüssel teilen diesen Datenbestand.
 - UTF-8-CSV importieren, Spaltenrollen frei zuordnen und Fehlwerte prüfen.
 - Targetdefinition, Klassenverteilung, Fallzahlen und Testaufteilung vor dem Start prüfen.
 - Ungültige Grundeinstellungen sperren den Start; geänderte Einstellungen kennzeichnen alte Ergebnisse.
