@@ -16,8 +16,19 @@ SPLITS = {"Unabhängiger Querschnitt": "random", "Neue Einheiten": "group", "Zuk
 
 
 def request(method, path, **kwargs):
-    response = httpx.request(method, os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + path,
-                            headers={"X-API-Key": st.session_state.get("access_key", "")}, timeout=300, trust_env=False, **kwargs)
+    token = st.session_state.get("access_key", "").strip()
+    if not token:
+        raise ValueError("Bitte den Zugangsschlüssel in der Seitenleiste eingeben.")
+    if any(not 33 <= ord(char) <= 126 for char in token):
+        raise ValueError("Der Zugangsschlüssel enthält unzulässige Zeichen. Bitte nur den Variablenwert ohne Begleittext einfügen.")
+    try:
+        response = httpx.request(method, os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + path,
+                                headers={"X-API-Key": token}, timeout=300, trust_env=False, **kwargs)
+    except httpx.TimeoutException:
+        raise ValueError("Das Backend antwortet nicht rechtzeitig. Bitte den gespeicherten Lauf prüfen oder später erneut versuchen.") from None
+    except (httpx.HTTPError, UnicodeError):
+        # Transport errors may embed complete headers, including the access key.
+        raise ValueError("Die Verbindung zum Backend ist fehlgeschlagen. Bitte Zugang und Erreichbarkeit prüfen.") from None
     if response.status_code >= 400:
         try:
             detail = response.json().get("detail", response.text)
@@ -25,7 +36,7 @@ def request(method, path, **kwargs):
                 detail = " · ".join(str(x.get("msg", x)).removeprefix("Value error, ") for x in detail)
         except ValueError:
             detail = response.text
-        raise ValueError(str(detail))
+        raise ValueError(str(detail).replace(token, "[Zugangsschlüssel ausgeblendet]"))
     return response
 
 
