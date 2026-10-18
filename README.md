@@ -69,14 +69,9 @@ Die vollständige [Methoden- und Unterstützungsmatrix](docs/methods.md) beschre
 
 ## Technischer Aufbau
 
-```mermaid
-flowchart TD
-    UI["Streamlit · drei Arbeitsbereiche"] --> API["FastAPI · Validierung und Zugriffsschutz"]
-    API --> PIPE["Analyse-Pipeline · scikit-learn / statsmodels"]
-    API --> DB[("PostgreSQL · Datensätze und Analyseläufe")]
-    PIPE --> API
-    API --> REPORT["HTML-Bericht · CSV · JSON-Konfiguration"]
-```
+![UML-Komponentenübersicht: Streamlit-Oberfläche, API mit Analyse und Persistenz sowie PostgreSQL](docs/assets/uml-components.png)
+
+Die [UML-Konzeption](docs/uml.md) ergänzt diese Übersicht um ein [Anwendungsfalldiagramm](docs/uml.md#anwendungsfalldiagramm) für die Nutzerziele, das erläuterte [Komponentendiagramm](docs/uml.md#komponentendiagramm) und ein [Sequenzdiagramm „Analyse starten“](docs/uml.md#sequenzdiagramm). Die editierbaren PlantUML-Quellen sind mitversioniert. Die Diagramme beschreiben den implementierten Stand.
 
 | Baustein | Umsetzung |
 |---|---|
@@ -140,9 +135,17 @@ quality-regression-workbench/
 │   ├── methods.md                     # Methoden, Annahmen und Unterstützungsmatrix
 │   ├── validation.md                  # Validierungsszenarien
 │   ├── railway.md                     # Bereitstellung und Betriebsprüfung
+│   ├── uml.md                         # Anwendungsfälle, Komponenten und Analysesequenz
+│   ├── uml/
+│   │   ├── use-cases.puml             # Editierbares Anwendungsfalldiagramm
+│   │   ├── components.puml            # Editierbares Komponentendiagramm
+│   │   └── analysis-sequence.puml     # Editierbares Sequenzdiagramm
 │   └── assets/
 │       ├── linear-test-results.svg
-│       └── logistic-test-results.svg
+│       ├── logistic-test-results.svg
+│       ├── uml-use-cases.png
+│       ├── uml-components.png
+│       └── uml-analysis-sequence.png
 ├── app.py                             # Streamlit-Einstieg und Seitennavigation
 ├── Dockerfile
 ├── compose.yaml                       # Lokaler Betrieb mit UI, API und PostgreSQL

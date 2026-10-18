@@ -1,5 +1,7 @@
 # Architektur und Entscheidungen
 
+Die [UML-Konzeption](uml.md) zeigt Nutzerziele, Komponenten und den Ablauf eines Analyselaufs anhand des implementierten Stands.
+
 Die Oberfläche führt durch Upload, Konfiguration und Ergebnis. Sie spricht ausschließlich die HTTP-API an. Das Backend validiert Rollen und Target, erstellt die Datenaufteilung und führt die Pipeline aus. SQLAlchemy speichert Datenstände und unveränderliche Analyseläufe.
 
 | Modul | Verantwortung |

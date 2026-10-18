@@ -1,0 +1,61 @@
+@startuml
+skinparam defaultFontName Source Sans Pro
+skinparam defaultFontSize 14
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceArrowColor #526880
+skinparam sequenceParticipantBackgroundColor #EDF4FB
+skinparam sequenceParticipantBorderColor #234B75
+skinparam sequenceGroupBorderColor #8CA0B5
+hide footbox
+title Sequenz: Analyse starten
+autonumber
+
+actor "QM-Anwender" as User
+participant "Streamlit-UI" as UI
+participant "FastAPI-Backend" as API
+participant "Analyse-Pipeline" as Pipeline
+database "Datenbank" as DB
+
+note over UI, API
+  Voraussetzung: CSV importiert und Konfiguration gewählt.
+  Die UI hat Fallzahlen und Testaufteilung per Preview geprüft.
+end note
+User -> UI : Analyse starten
+UI -> API : POST /datasets/{id}/analyses\nKonfiguration als JSON, X-API-Key
+API -> API : Zugang und AnalysisConfig prüfen
+note right of API
+  Ungültiger Zugang / Konfiguration:
+  HTTP 401 / 422, keine Schätzung.
+end note
+API -> API : Analyselock erwerben
+note right of API
+  Belegter Lock: HTTP 429.
+end note
+API -> DB : Datensatz mit Zeilensperre lesen\nüber SQLAlchemy
+DB --> API : Gespeicherter Datenstand
+API -> Pipeline : analyze(frame, config)
+alt Daten und Modell erfolgreich verarbeitet
+  Pipeline -> Pipeline : Target und auswertbare Fälle bestimmen\nTrainings-, Test- und CV-Aufteilung
+  Pipeline -> Pipeline : Aufbereitung im Trainingsfold lernen\nReferenzmodell, optional Elastic Net schätzen
+  Pipeline -> Pipeline : Testvorhersagen und Kennzahlen\nKoeffizienten / Aufbereitungsmetadaten
+  Pipeline --> API : Ergebnis und interne Modellartefakte
+  API -> DB : AnalysisRun speichern und COMMIT
+  DB --> API : Speicherung bestätigt
+  API -> API : Lock im finally freigeben
+  API --> UI : HTTP 200: Lauf-ID, Ergebnis, Datensatz-ID
+  UI -> UI : Lauf im Sitzungszustand ablegen\nZur Ergebnisseite wechseln
+  UI --> User : Kennzahlen, Grafiken und Modelldetails
+else Daten- oder Modellvalidierung schlägt fehl
+  Pipeline --> API : ValueError / numerischer Validierungsfehler
+  API -> DB : Offene Transaktion zurückrollen
+  API -> API : Lock im finally freigeben
+  API --> UI : HTTP 422 mit Fehlermeldung
+  UI --> User : Korrekturhinweis anzeigen
+end
+
+note over API, DB
+  Kein Refit auf allen Daten nach der Testbewertung.
+  Fehlende Datensätze und unerwartete Fehler: siehe Fehlerpfade in docs/uml.md.
+end note
+@enduml

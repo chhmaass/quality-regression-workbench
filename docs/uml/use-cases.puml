@@ -1,0 +1,34 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam defaultFontName Source Sans Pro
+skinparam defaultFontSize 15
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam ArrowColor #526880
+skinparam usecaseBackgroundColor #EDF4FB
+skinparam usecaseBorderColor #234B75
+skinparam rectangleBorderColor #8CA0B5
+title Anwendungsfälle der QM-Regressionswerkstatt
+
+actor "QM-Anwender" as User
+rectangle "Quality Regression Workbench" {
+  usecase "Messdaten importieren\nund Datenqualität prüfen" as Import
+  usecase "Analyse konfigurieren\nund ausführen" as Analyze
+  usecase "Ergebnisse\ninterpretieren" as Results
+  usecase "Bericht und\nErgebnisdaten exportieren" as Export
+  usecase "Gespeicherten\nAnalyselauf öffnen" as Open
+  usecase "Datensätze und\nAnalyseläufe löschen" as Delete
+}
+User -- Import
+User -- Analyze
+User -- Results
+User -- Export
+User -- Open
+User -- Delete
+
+note bottom of User
+  Gemeinsamer Zugangsschlüssel.
+  Keine getrennten Benutzerrollen.
+end note
+@enduml

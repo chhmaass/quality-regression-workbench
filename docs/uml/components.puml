@@ -1,0 +1,40 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+skinparam defaultFontName Source Sans Pro
+skinparam defaultFontSize 15
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam componentStyle uml2
+skinparam componentBackgroundColor #EDF4FB
+skinparam componentBorderColor #234B75
+skinparam ArrowColor #526880
+skinparam packageBorderColor #8CA0B5
+title Komponenten und Verantwortlichkeiten
+
+package "UI-Dienst" {
+  component "Streamlit-Oberfläche\napp.py, views/, *_ui.py, ui.py" as UI
+}
+package "API-Dienst" {
+  component "HTTP-API und Validierung\napi.py, schemas.py" as API
+  component "Analyse-Pipeline\nanalysis.py, data.py, features.py" as Analysis
+  component "Persistenzzugriff\nstorage.py / SQLAlchemy" as Storage
+  component "Bericht und CSV-Export\nreport.py" as Report
+}
+database "PostgreSQL\ndatasets / analysis_runs" as DB
+
+UI ..> API : HTTP / JSON / X-API-Key
+API ..> Analysis : Analyse berechnen
+API ..> Storage : Daten und Läufe lesen / schreiben / löschen
+API ..> Report : Export erzeugen
+Storage --> DB : SQL / Transaktionen
+
+note bottom of Analysis
+  Trainingslokale Aufbereitung,
+  Regression und Testbewertung.
+end note
+note bottom of DB
+  SQLite beim lokalen Einstieg.
+  Keine direkte Verbindung zur UI.
+end note
+@enduml
